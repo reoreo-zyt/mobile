@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Animated, Switch } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -118,13 +119,74 @@ const { width, height } = Dimensions.get('window');
 
 const HomeScreen = () => {
   const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
   const [currentTime, setCurrentTime] = useState('');
   const [showApp, setShowApp] = useState<string | null>(null);
   const [batteryLevel, setBatteryLevel] = useState(100);
   const [volume, setVolume] = useState(70);
   const [darkMode, setDarkMode] = useState(false);
   const [language, setLanguage] = useState('zh'); // zh for Chinese, en for English
+  
+  // 使用 darkMode 状态来控制主题，而不是系统的 colorScheme
+  const isDark = darkMode;
+
+  // 从存储中加载保存的设置
+  useEffect(() => {
+    const loadSettings = () => {
+      try {
+        console.log('Loading settings...');
+        
+        // 直接使用 localStorage，确保在 web 环境中工作
+        const savedLanguage = localStorage.getItem('language');
+        const savedDarkMode = localStorage.getItem('darkMode');
+        
+        console.log('Saved language:', savedLanguage);
+        console.log('Saved dark mode:', savedDarkMode);
+        
+        if (savedLanguage) {
+          console.log('Setting language to:', savedLanguage);
+          setLanguage(savedLanguage);
+        }
+        
+        if (savedDarkMode) {
+          console.log('Setting dark mode to:', savedDarkMode === 'true');
+          setDarkMode(savedDarkMode === 'true');
+        }
+      } catch (error) {
+        console.error('Error loading settings:', error);
+      }
+    };
+    
+    // 立即执行加载设置
+    loadSettings();
+  }, []);
+
+  // 保存语言设置
+  useEffect(() => {
+    const saveLanguage = () => {
+      try {
+        console.log('Saving language:', language);
+        localStorage.setItem('language', language);
+      } catch (error) {
+        console.error('Error saving language:', error);
+      }
+    };
+    
+    saveLanguage();
+  }, [language]);
+
+  // 保存黑暗模式设置
+  useEffect(() => {
+    const saveDarkMode = () => {
+      try {
+        console.log('Saving dark mode:', darkMode);
+        localStorage.setItem('darkMode', darkMode.toString());
+      } catch (error) {
+        console.error('Error saving dark mode:', error);
+      }
+    };
+    
+    saveDarkMode();
+  }, [darkMode]);
 
   // 更新时间
   useEffect(() => {
@@ -162,6 +224,13 @@ const HomeScreen = () => {
   const handleAppPress = (appId: string) => {
     setShowApp(appId === showApp ? null : appId);
   };
+
+  // 监听黑暗模式变化，更新系统主题
+  useEffect(() => {
+    if (darkMode) {
+      // 这里可以添加设置系统黑暗模式的代码
+    }
+  }, [darkMode]);
 
   return (
     <View style={[styles.container, isDark && styles.darkContainer]}>
@@ -264,6 +333,23 @@ const HomeScreen = () => {
                     <Text style={[styles.languageText, language === 'en' && styles.selectedLanguageText, isDark && styles.darkText]}>English</Text>
                   </TouchableOpacity>
                 </View>
+              </View>
+
+              <View style={[styles.settingsSection, isDark && styles.darkSettingsSection]}>
+                <Text style={[styles.sectionTitle, isDark && styles.darkText]}>{language === 'zh' ? '存储设置' : 'Storage Settings'}</Text>
+                <View style={styles.settingRow}>
+                  <Text style={[styles.settingLabel, isDark && styles.darkText]}>{language === 'zh' ? '缓存大小' : 'Cache Size'}</Text>
+                  <Text style={[styles.aboutText, isDark && styles.darkText]}>128 MB</Text>
+                </View>
+                <TouchableOpacity 
+                  style={[styles.clearCacheButton, isDark && styles.darkClearCacheButton]}
+                  onPress={() => {
+                    // 清除缓存的逻辑
+                    alert(language === 'zh' ? '缓存已清除' : 'Cache cleared');
+                  }}
+                >
+                  <Text style={styles.clearCacheButtonText}>{language === 'zh' ? '清除缓存' : 'Clear Cache'}</Text>
+                </TouchableOpacity>
               </View>
 
               <View style={[styles.settingsSection, isDark && styles.darkSettingsSection]}>
@@ -513,6 +599,21 @@ const styles = StyleSheet.create({
   aboutText: {
     fontSize: 16,
     color: '#666',
+  },
+  clearCacheButton: {
+    backgroundColor: '#007AFF',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  darkClearCacheButton: {
+    backgroundColor: '#0056b3',
+  },
+  clearCacheButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 
