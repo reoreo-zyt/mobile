@@ -1,12 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Animated } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Animated, Switch } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import CalendarScreen from './calendar';
-import WeatherScreen from './weather';
-import AlbumScreen from './album';
 
 // 应用图标组件
 const AppIcon = ({ app, isDark, onPress }) => {
@@ -126,6 +122,9 @@ const HomeScreen = () => {
   const [currentTime, setCurrentTime] = useState('');
   const [showApp, setShowApp] = useState<string | null>(null);
   const [batteryLevel, setBatteryLevel] = useState(100);
+  const [volume, setVolume] = useState(70);
+  const [darkMode, setDarkMode] = useState(false);
+  const [language, setLanguage] = useState('zh'); // zh for Chinese, en for English
 
   // 更新时间
   useEffect(() => {
@@ -151,32 +150,21 @@ const HomeScreen = () => {
   }, []);
 
   const apps = [
-    { id: 'calendar', name: '日历', icon: 'calendar-today', color: '#007AFF', component: <CalendarScreen /> },
-    { id: 'weather', name: '天气', icon: 'wb-sunny', color: '#FF9500', component: <WeatherScreen /> },
-    { id: 'album', name: '相册', icon: 'photo', color: '#FF2D55', component: <AlbumScreen /> },
-    { id: 'settings', name: '设置', icon: 'settings', color: '#8E8E93' },
-    { id: 'clock', name: '时钟', icon: 'access-time', color: '#5856D6' },
-    { id: 'notes', name: '备忘录', icon: 'note', color: '#FFCC00' },
+    { id: 'settings', name: language === 'zh' ? '设置' : 'Settings', icon: 'settings', color: '#8E8E93' },
   ];
 
   const bottomApps = [
-    { id: 'wechat', name: '微信', icon: 'chat', color: '#07C160' },
-    { id: 'phone', name: '电话', icon: 'phone', color: '#34C759' },
-    { id: 'sms', name: '短信', icon: 'sms', color: '#007AFF' },
+    { id: 'wechat', name: language === 'zh' ? '微信' : 'WeChat', icon: 'chat', color: '#07C160' },
+    { id: 'phone', name: language === 'zh' ? '电话' : 'Phone', icon: 'phone', color: '#34C759' },
+    { id: 'sms', name: language === 'zh' ? '短信' : 'SMS', icon: 'sms', color: '#007AFF' },
   ];
 
   const handleAppPress = (appId: string) => {
     setShowApp(appId === showApp ? null : appId);
   };
 
-  const renderApp = () => {
-    if (!showApp) return null;
-    const app = apps.find(a => a.id === showApp);
-    return app?.component || null;
-  };
-
   return (
-    <SafeAreaView style={[styles.container, isDark && styles.darkContainer]}>
+    <View style={[styles.container, isDark && styles.darkContainer]}>
       {/* 状态栏 */}
       <View style={[styles.statusBar, isDark && styles.darkStatusBar]}>
         <Text style={[styles.timeText, isDark && styles.darkText]}>{currentTime}</Text>
@@ -191,7 +179,7 @@ const HomeScreen = () => {
       {!showApp ? (
         <View style={styles.homeScreen}>
           {/* 应用图标网格 */}
-          <View style={styles.appGrid}>
+          <View style={[styles.appGrid, styles.centeredAppGrid]}>
             {apps.map((app) => (
               <AppIcon
                 key={app.id}
@@ -226,10 +214,67 @@ const HomeScreen = () => {
             <MaterialIcons name="arrow-back" size={24} color={isDark ? '#fff' : '#007AFF'} />
           </TouchableOpacity>
           {/* 应用内容 */}
-          {renderApp()}
+          {showApp === 'settings' && (
+            <ScrollView style={[styles.settingsContainer, isDark && styles.darkSettingsContainer]}>
+              <View style={[styles.settingsSection, isDark && styles.darkSettingsSection]}>
+                <Text style={[styles.sectionTitle, isDark && styles.darkText]}>{language === 'zh' ? '音量控制' : 'Volume Control'}</Text>
+                <View style={styles.volumeControl}>
+                  <MaterialIcons 
+                    name="volume-down" 
+                    size={24} 
+                    color={isDark ? '#fff' : '#000'} 
+                  />
+                  <View style={styles.slider}>
+                    <Text style={[styles.volumeValue, isDark && styles.darkText]}>{volume}%</Text>
+                  </View>
+                  <MaterialIcons 
+                    name="volume-up" 
+                    size={24} 
+                    color={isDark ? '#fff' : '#000'} 
+                  />
+                </View>
+              </View>
+
+              <View style={[styles.settingsSection, isDark && styles.darkSettingsSection]}>
+                <Text style={[styles.sectionTitle, isDark && styles.darkText]}>{language === 'zh' ? '显示设置' : 'Display Settings'}</Text>
+                <View style={styles.settingRow}>
+                  <Text style={[styles.settingLabel, isDark && styles.darkText]}>{language === 'zh' ? '黑暗模式' : 'Dark Mode'}</Text>
+                  <Switch
+                    value={darkMode}
+                    onValueChange={setDarkMode}
+                    trackColor={{ false: '#e0e0e0', true: '#333' }}
+                    thumbColor={darkMode ? '#007AFF' : '#f4f3f4'}
+                  />
+                </View>
+              </View>
+
+              <View style={[styles.settingsSection, isDark && styles.darkSettingsSection]}>
+                <Text style={[styles.sectionTitle, isDark && styles.darkText]}>{language === 'zh' ? '语言设置' : 'Language Settings'}</Text>
+                <View style={[styles.languageOptions, isDark && styles.darkLanguageOptions]}>
+                  <TouchableOpacity 
+                    style={[styles.languageOption, language === 'zh' && styles.selectedLanguage, isDark && styles.darkLanguageOption]}
+                    onPress={() => setLanguage('zh')}
+                  >
+                    <Text style={[styles.languageText, language === 'zh' && styles.selectedLanguageText, isDark && styles.darkText]}>中文</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.languageOption, language === 'en' && styles.selectedLanguage, isDark && styles.darkLanguageOption]}
+                    onPress={() => setLanguage('en')}
+                  >
+                    <Text style={[styles.languageText, language === 'en' && styles.selectedLanguageText, isDark && styles.darkText]}>English</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={[styles.settingsSection, isDark && styles.darkSettingsSection]}>
+                <Text style={[styles.sectionTitle, isDark && styles.darkText]}>{language === 'zh' ? '关于' : 'About'}</Text>
+                <Text style={[styles.aboutText, isDark && styles.darkText]}>{language === 'zh' ? '版本 1.0.0' : 'Version 1.0.0'}</Text>
+              </View>
+            </ScrollView>
+          )}
         </View>
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -376,6 +421,98 @@ const styles = StyleSheet.create({
   darkBackButton: {
     backgroundColor: '#1e1e1e',
     borderBottomColor: '#333',
+  },
+  centeredAppGrid: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  settingsContainer: {
+    flex: 1,
+    padding: 20,
+    backgroundColor: '#f5f5f5',
+  },
+  darkSettingsContainer: {
+    backgroundColor: '#121212',
+  },
+  settingsSection: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  darkSettingsSection: {
+    backgroundColor: '#1e1e1e',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    color: '#333',
+  },
+  volumeControl: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  slider: {
+    flex: 1,
+    marginHorizontal: 10,
+  },
+  volumeValue: {
+    textAlign: 'center',
+    fontSize: 16,
+    color: '#666',
+  },
+  settingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  settingLabel: {
+    fontSize: 16,
+    color: '#333',
+  },
+  languageOptions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  darkLanguageOptions: {
+    borderColor: '#333',
+  },
+  languageOption: {
+    flex: 1,
+    padding: 12,
+    marginHorizontal: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    alignItems: 'center',
+  },
+  darkLanguageOption: {
+    borderColor: '#333',
+  },
+  selectedLanguage: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  languageText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  selectedLanguageText: {
+    color: '#fff',
+  },
+  aboutText: {
+    fontSize: 16,
+    color: '#666',
   },
 });
 
