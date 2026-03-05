@@ -1,9 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Animated, Switch } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MaterialIcons } from '@expo/vector-icons';
-import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { MaterialIcons } from '@expo/vector-icons';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Dimensions, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+
+// 自定义鸟图标组件
+const BirdIcon = () => (
+  <View style={styles.birdBody}>
+    <View style={styles.birdEye} />
+    <View style={styles.birdBeak} />
+  </View>
+);
 
 // 应用图标组件
 const AppIcon = ({ app, isDark, onPress }) => {
@@ -54,7 +60,11 @@ const AppIcon = ({ app, isDark, onPress }) => {
         ]}
       >
         <View style={[styles.iconContainer, { backgroundColor: app.color }]}>
-          <MaterialIcons name={app.icon as any} size={24} color="#fff" />
+          {app.icon === 'flappybird' ? (
+            <BirdIcon />
+          ) : (
+            <MaterialIcons name={app.icon as any} size={24} color="#fff" />
+          )}
         </View>
       </Animated.View>
       <Text style={[styles.appName, isDark && styles.darkText]}>{app.name}</Text>
@@ -112,6 +122,334 @@ const BottomAppIcon = ({ app, isDark, onPress }) => {
       </Animated.View>
       <Text style={[styles.bottomAppName, isDark && styles.darkText]}>{app.name}</Text>
     </TouchableOpacity>
+  );
+};
+
+// 跳跃鸟游戏组件
+const FlappyBirdGame = ({ language, isDark }) => {
+  // 游戏状态
+  const [gameState, setGameState] = useState('start'); // start, playing, gameOver
+  const [score, setScore] = useState(0);
+  const [highScore, setHighScore] = useState(0);
+  const [birdY, setBirdY] = useState(200);
+  const [birdVelocity, setBirdVelocity] = useState(0);
+  const [pipes, setPipes] = useState([]);
+  
+  // 游戏常量
+  const gameWidth = Dimensions.get('window').width;
+  const gameHeight = Dimensions.get('window').height - 100;
+  const birdSize = 35;
+  const pipeWidth = 70;
+  const pipeGap = 140;
+  const gravity = 0.5;
+  const jumpForce = -9;
+  const pipeSpeed = 3;
+  const pipeInterval = 1500;
+  
+  // 游戏循环引用
+  const gameLoopId = useRef(null);
+  const lastPipeTime = useRef(0);
+
+  // 加载高分
+  useEffect(() => {
+    try {
+      const savedHighScore = localStorage.getItem('flappyBirdHighScore');
+      if (savedHighScore) {
+        setHighScore(parseInt(savedHighScore));
+      }
+    } catch (error) {
+      console.error('Error loading high score:', error);
+    }
+  }, []);
+
+  // 保存高分
+  useEffect(() => {
+    if (score > highScore) {
+      setHighScore(score);
+      try {
+        localStorage.setItem('flappyBirdHighScore', score.toString());
+      } catch (error) {
+        console.error('Error saving high score:', error);
+      }
+    }
+  }, [score, highScore]);
+
+  // 键盘事件监听
+  useEffect(() => {
+    const handleKeyPress = (event) => {
+      if (event.code === 'Space') {
+        handleJump();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => {
+      window.removeEventListener('keydown', handleKeyPress);
+    };
+  }, []);
+
+  // 生成管道
+  const generatePipe = () => {
+    const pipeHeight = Math.random() * (gameHeight - pipeGap - 100) + 50;
+    setPipes(prevPipes => [...prevPipes, {
+      id: Date.now(),
+      x: gameWidth,
+      topHeight: pipeHeight,
+      scored: false
+    }]);
+  };
+
+  // 检查碰撞
+  const checkCollision = (newY) => {
+    const birdX = gameWidth / 4;
+    
+    // 地面和天花板碰撞
+    if (newY < 0 || newY > gameHeight - birdSize - 50) {
+      return true;
+    }
+
+    // 管道碰撞
+    for (let i = 0; i < pipes.length; i++) {
+      const pipe = pipes[i];
+      if (
+        birdX < pipe.x + pipeWidth &&
+        birdX + birdSize > pipe.x &&
+        (newY < pipe.topHeight || newY + birdSize > pipe.topHeight + pipeGap)
+      ) {
+        return true;
+      }
+    }
+    
+    return false;
+  };
+
+  // 游戏主循环
+  const gameLoop = () => {
+    // 生成新管道
+    if (Date.now() - lastPipeTime.current > pipeInterval) {
+      generatePipe();
+      lastPipeTime.current = Date.now();
+    }
+
+    // 更新管道位置和检查得分
+    setPipes(prevPipes => {
+      const updatedPipes = prevPipes
+        .map(pipe => {
+          const newPipe = { ...pipe, x: pipe.x - pipeSpeed };
+          
+          // 检查得分
+          if (newPipe.x + pipeWidth < gameWidth / 4 && !newPipe.scored) {
+            setScore(prevScore => prevScore + 1);
+            newPipe.scored = true;
+          }
+          
+          return newPipe;
+        })
+        .filter(pipe => pipe.x > -pipeWidth);
+      
+      // 更新鸟的状态
+      const newVelocity = birdVelocity + gravity;
+      const newY = birdY + newVelocity;
+      
+      // 检查碰撞
+      const birdX = gameWidth / 4;
+      let collision = false;
+      
+      // 地面和天花板碰撞
+      if (newY < 0 || newY > gameHeight - birdSize - 50) {
+        collision = true;
+      }
+
+      // 管道碰撞
+      for (let i = 0; i < updatedPipes.length; i++) {
+        const pipe = updatedPipes[i];
+        if (
+          birdX < pipe.x + pipeWidth &&
+          birdX + birdSize > pipe.x &&
+          (newY < pipe.topHeight || newY + birdSize > pipe.topHeight + pipeGap)
+        ) {
+          collision = true;
+          break;
+        }
+      }
+      
+      // 如果碰撞，结束游戏
+      if (collision) {
+        setGameState('gameOver');
+        if (gameLoopId.current) {
+          cancelAnimationFrame(gameLoopId.current);
+          gameLoopId.current = null;
+        }
+      } else {
+        // 更新鸟的位置和速度
+        setBirdY(newY);
+        setBirdVelocity(newVelocity);
+      }
+      
+      return updatedPipes;
+    });
+
+    // 继续游戏循环
+    if (gameState === 'playing') {
+      gameLoopId.current = requestAnimationFrame(gameLoop);
+    }
+  };
+
+  // 游戏状态变化时的处理
+  useEffect(() => {
+    if (gameState === 'playing') {
+      // 重置游戏状态
+      setBirdY(200);
+      setBirdVelocity(0);
+      setPipes([]);
+      lastPipeTime.current = 0;
+      
+      // 生成第一个管道
+      generatePipe();
+      lastPipeTime.current = Date.now();
+      
+      // 开始游戏循环
+      gameLoopId.current = requestAnimationFrame(gameLoop);
+    } else if (gameState === 'gameOver' || gameState === 'start') {
+      // 停止游戏循环
+      if (gameLoopId.current) {
+        cancelAnimationFrame(gameLoopId.current);
+        gameLoopId.current = null;
+      }
+    }
+
+    return () => {
+      if (gameLoopId.current) {
+        cancelAnimationFrame(gameLoopId.current);
+      }
+    };
+  }, [gameState]);
+
+  // 跳跃
+  const handleJump = () => {
+    if (gameState === 'start') {
+      setGameState('playing');
+    } else if (gameState === 'playing') {
+      setBirdVelocity(jumpForce);
+    } else if (gameState === 'gameOver') {
+      // 重新开始游戏
+      setGameState('start');
+      setScore(0);
+    }
+  };
+
+  return (
+    <View style={[styles.gameContainer, isDark && styles.darkGameContainer]}>
+      {/* 得分和高分 */}
+      <View style={styles.scoreContainer}>
+        <Text style={[styles.scoreText, isDark && styles.darkText]}>{score}</Text>
+        <Text style={[styles.highScoreText, isDark && styles.darkText]}>
+          {language === 'zh' ? `最高分: ${highScore}` : `High Score: ${highScore}`}
+        </Text>
+      </View>
+
+      {/* 游戏区域 */}
+      <TouchableOpacity style={styles.gameArea} activeOpacity={1} onPress={handleJump}>
+        {/* 背景 */}
+        <View style={styles.background} />
+        
+        {/* 管道 */}
+        {pipes.map((pipe) => (
+          <React.Fragment key={pipe.id}>
+            {/* 上管道 */}
+            <View
+              style={[
+                styles.pipe,
+                styles.topPipe,
+                {
+                  left: pipe.x,
+                  height: pipe.topHeight,
+                  width: pipeWidth,
+                  position: 'absolute',
+                  top: 0
+                }
+              ]}
+            >
+              <View style={[styles.pipeCap, styles.topPipeCap]} />
+            </View>
+            {/* 下管道 */}
+            <View
+              style={[
+                styles.pipe,
+                styles.bottomPipe,
+                {
+                  left: pipe.x,
+                  top: pipe.topHeight + pipeGap,
+                  height: gameHeight - (pipe.topHeight + pipeGap) - 50,
+                  width: pipeWidth,
+                  position: 'absolute'
+                }
+              ]}
+            >
+              <View style={[styles.pipeCap, styles.bottomPipeCap]} />
+            </View>
+          </React.Fragment>
+        ))}
+
+        {/* 鸟 */}
+        <View
+          style={[
+            styles.bird,
+            {
+              top: birdY,
+              left: gameWidth / 4,
+              width: birdSize,
+              height: birdSize,
+              position: 'absolute',
+              zIndex: 10
+            }
+          ]}
+        >
+          <View style={styles.birdBody}>
+            <View style={styles.birdEye} />
+            <View style={styles.birdBeak} />
+          </View>
+        </View>
+
+        {/* 地面 */}
+        <View style={[styles.ground, isDark && styles.darkGround]} />
+
+        {/* 开始界面 */}
+        {gameState === 'start' && (
+          <View style={styles.startScreen}>
+            <Text style={[styles.startTitle, isDark && styles.darkText]}>
+              Flappy Bird
+            </Text>
+            <Text style={[styles.startSubtitle, isDark && styles.darkText]}>
+              {language === 'zh' ? '点击屏幕开始游戏' : 'Tap screen to start'}
+            </Text>
+          </View>
+        )}
+
+        {/* 游戏结束界面 */}
+        {gameState === 'gameOver' && (
+          <View style={styles.gameOverScreen}>
+            <Text style={[styles.gameOverTitle, isDark && styles.darkText]}>
+              {language === 'zh' ? '游戏结束' : 'Game Over'}
+            </Text>
+            <Text style={[styles.gameOverScore, isDark && styles.darkText]}>
+              {language === 'zh' ? `得分: ${score}` : `Score: ${score}`}
+            </Text>
+            <Text style={[styles.gameOverHighScore, isDark && styles.darkText]}>
+              {language === 'zh' ? `最高分: ${highScore}` : `High Score: ${highScore}`}
+            </Text>
+            <TouchableOpacity
+              style={[styles.restartButton, isDark && styles.darkRestartButton]}
+              onPress={handleJump}
+            >
+              <Text style={styles.restartButtonText}>
+                {language === 'zh' ? '重新开始' : 'Restart'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </TouchableOpacity>
+    </View>
   );
 };
 
@@ -212,6 +550,7 @@ const HomeScreen = () => {
   }, []);
 
   const apps = [
+    { id: 'flappybird', name: language === 'zh' ? '跳跃鸟' : 'Flappy Bird', icon: 'flappybird', color: '#FFEB3B' },
     { id: 'settings', name: language === 'zh' ? '设置' : 'Settings', icon: 'settings', color: '#8E8E93' },
   ];
 
@@ -283,6 +622,9 @@ const HomeScreen = () => {
             <MaterialIcons name="arrow-back" size={24} color={isDark ? '#fff' : '#007AFF'} />
           </TouchableOpacity>
           {/* 应用内容 */}
+          {showApp === 'flappybird' && (
+            <FlappyBirdGame language={language} isDark={isDark} />
+          )}
           {showApp === 'settings' && (
             <ScrollView style={[styles.settingsContainer, isDark && styles.darkSettingsContainer]}>
               <View style={[styles.settingsSection, isDark && styles.darkSettingsSection]}>
@@ -611,6 +953,182 @@ const styles = StyleSheet.create({
     backgroundColor: '#0056b3',
   },
   clearCacheButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // 游戏相关样式
+  gameContainer: {
+    flex: 1,
+    backgroundColor: '#87CEEB',
+  },
+  darkGameContainer: {
+    backgroundColor: '#1a2a3a',
+  },
+  scoreContainer: {
+    paddingTop: 20,
+    alignItems: 'center',
+  },
+  scoreText: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: '#fff',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 3,
+  },
+  highScoreText: {
+    fontSize: 16,
+    color: '#fff',
+    marginTop: 5,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  gameArea: {
+    flex: 1,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  background: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#87CEEB',
+  },
+  ground: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 50,
+    backgroundColor: '#795548',
+  },
+  darkGround: {
+    backgroundColor: '#5D4037',
+  },
+  bird: {
+    position: 'absolute',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  birdBody: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#FFEB3B',
+    borderRadius: '50%',
+    borderWidth: 2,
+    borderColor: '#FFC107',
+    position: 'relative',
+  },
+  birdEye: {
+    position: 'absolute',
+    top: 5,
+    right: 8,
+    width: 8,
+    height: 8,
+    backgroundColor: '#000',
+    borderRadius: '50%',
+  },
+  birdBeak: {
+    position: 'absolute',
+    top: 12,
+    right: -5,
+    width: 0,
+    height: 0,
+    borderTopWidth: 6,
+    borderBottomWidth: 6,
+    borderLeftWidth: 10,
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
+    borderLeftColor: '#FF9800',
+  },
+  pipe: {
+    position: 'absolute',
+    backgroundColor: '#2E8B57',
+  },
+  topPipe: {
+    top: 0,
+    borderBottomRightRadius: 10,
+    borderBottomLeftRadius: 10,
+  },
+  bottomPipe: {
+    borderTopRightRadius: 10,
+    borderTopLeftRadius: 10,
+  },
+  pipeCap: {
+    position: 'absolute',
+    left: -10,
+    right: -10,
+    height: 20,
+    backgroundColor: '#2E8B57',
+  },
+  topPipeCap: {
+    bottom: -20,
+  },
+  bottomPipeCap: {
+    top: -20,
+  },
+  startScreen: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -100 }, { translateY: -50 }],
+    width: 200,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    padding: 20,
+    borderRadius: 10,
+  },
+  startTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#333',
+  },
+  startSubtitle: {
+    fontSize: 16,
+    color: '#666',
+  },
+  gameOverScreen: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -125 }, { translateY: -100 }],
+    width: 250,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    padding: 20,
+    borderRadius: 10,
+  },
+  gameOverTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#333',
+  },
+  gameOverScore: {
+    fontSize: 20,
+    marginBottom: 10,
+    color: '#666',
+  },
+  gameOverHighScore: {
+    fontSize: 16,
+    marginBottom: 20,
+    color: '#666',
+  },
+  restartButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 40,
+    paddingVertical: 12,
+    borderRadius: 20,
+  },
+  darkRestartButton: {
+    backgroundColor: '#388E3C',
+  },
+  restartButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
