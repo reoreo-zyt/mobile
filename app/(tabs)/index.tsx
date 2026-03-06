@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
+  ScrollView,
   StyleSheet,
   Switch,
   Text,
@@ -131,342 +132,7 @@ const BottomAppIcon = ({ app, isDark, onPress }) => {
   );
 };
 
-// 跳跃鸟游戏组件
-const FlappyBirdGame = ({ language, isDark }) => {
-  // 游戏状态
-  const [gameState, setGameState] = useState("start"); // start, playing, gameOver
-  const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(0);
-  const [birdY, setBirdY] = useState(200);
-  const [birdVelocity, setBirdVelocity] = useState(0);
-  const [pipes, setPipes] = useState([]);
 
-  // 游戏常量
-  const gameWidth = Dimensions.get("window").width;
-  const gameHeight = Dimensions.get("window").height - 100;
-  const birdSize = 35;
-  const pipeWidth = 70;
-  const pipeGap = 140;
-  const gravity = 0.5;
-  const jumpForce = -9;
-  const pipeSpeed = 3;
-  const pipeInterval = 1500;
-
-  // 游戏循环引用
-  const gameLoopId = useRef(null);
-  const lastPipeTime = useRef(0);
-
-  // 加载高分
-  useEffect(() => {
-    try {
-      const savedHighScore = localStorage.getItem("flappyBirdHighScore");
-      if (savedHighScore) {
-        setHighScore(parseInt(savedHighScore));
-      }
-    } catch (error) {
-      console.error("Error loading high score:", error);
-    }
-  }, []);
-
-  // 保存高分
-  useEffect(() => {
-    if (score > highScore) {
-      setHighScore(score);
-      try {
-        localStorage.setItem("flappyBirdHighScore", score.toString());
-      } catch (error) {
-        console.error("Error saving high score:", error);
-      }
-    }
-  }, [score, highScore]);
-
-  // 键盘事件监听
-  useEffect(() => {
-    const handleKeyPress = (event) => {
-      if (event.code === "Space") {
-        handleJump();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyPress);
-    return () => {
-      window.removeEventListener("keydown", handleKeyPress);
-    };
-  }, []);
-
-  // 生成管道
-  const generatePipe = () => {
-    const pipeHeight = Math.random() * (gameHeight - pipeGap - 100) + 50;
-    setPipes((prevPipes) => [
-      ...prevPipes,
-      {
-        id: Date.now(),
-        x: gameWidth,
-        topHeight: pipeHeight,
-        scored: false,
-      },
-    ]);
-  };
-
-  // 检查碰撞
-  const checkCollision = (newY) => {
-    const birdX = gameWidth / 4;
-
-    // 地面和天花板碰撞
-    if (newY < 0 || newY > gameHeight - birdSize - 50) {
-      return true;
-    }
-
-    // 管道碰撞
-    for (let i = 0; i < pipes.length; i++) {
-      const pipe = pipes[i];
-      if (
-        birdX < pipe.x + pipeWidth &&
-        birdX + birdSize > pipe.x &&
-        (newY < pipe.topHeight || newY + birdSize > pipe.topHeight + pipeGap)
-      ) {
-        return true;
-      }
-    }
-
-    return false;
-  };
-
-  // 游戏主循环
-  const gameLoop = () => {
-    // 生成新管道
-    if (Date.now() - lastPipeTime.current > pipeInterval) {
-      generatePipe();
-      lastPipeTime.current = Date.now();
-    }
-
-    // 更新管道位置和检查得分
-    setPipes((prevPipes) => {
-      const updatedPipes = prevPipes
-        .map((pipe) => {
-          const newPipe = { ...pipe, x: pipe.x - pipeSpeed };
-
-          // 检查得分
-          if (newPipe.x + pipeWidth < gameWidth / 4 && !newPipe.scored) {
-            setScore((prevScore) => prevScore + 1);
-            newPipe.scored = true;
-          }
-
-          return newPipe;
-        })
-        .filter((pipe) => pipe.x > -pipeWidth);
-
-      // 更新鸟的状态
-      const newVelocity = birdVelocity + gravity;
-      const newY = birdY + newVelocity;
-
-      // 检查碰撞
-      const birdX = gameWidth / 4;
-      let collision = false;
-
-      // 地面和天花板碰撞
-      if (newY < 0 || newY > gameHeight - birdSize - 50) {
-        collision = true;
-      }
-
-      // 管道碰撞
-      for (let i = 0; i < updatedPipes.length; i++) {
-        const pipe = updatedPipes[i];
-        if (
-          birdX < pipe.x + pipeWidth &&
-          birdX + birdSize > pipe.x &&
-          (newY < pipe.topHeight || newY + birdSize > pipe.topHeight + pipeGap)
-        ) {
-          collision = true;
-          break;
-        }
-      }
-
-      // 如果碰撞，结束游戏
-      if (collision) {
-        setGameState("gameOver");
-        if (gameLoopId.current) {
-          cancelAnimationFrame(gameLoopId.current);
-          gameLoopId.current = null;
-        }
-      } else {
-        // 更新鸟的位置和速度
-        setBirdY(newY);
-        setBirdVelocity(newVelocity);
-      }
-
-      return updatedPipes;
-    });
-
-    // 继续游戏循环
-    if (gameState === "playing") {
-      gameLoopId.current = requestAnimationFrame(gameLoop);
-    }
-  };
-
-  // 游戏状态变化时的处理
-  useEffect(() => {
-    if (gameState === "playing") {
-      // 重置游戏状态
-      setBirdY(200);
-      setBirdVelocity(0);
-      setPipes([]);
-      lastPipeTime.current = 0;
-
-      // 生成第一个管道
-      generatePipe();
-      lastPipeTime.current = Date.now();
-
-      // 开始游戏循环
-      gameLoopId.current = requestAnimationFrame(gameLoop);
-    } else if (gameState === "gameOver" || gameState === "start") {
-      // 停止游戏循环
-      if (gameLoopId.current) {
-        cancelAnimationFrame(gameLoopId.current);
-        gameLoopId.current = null;
-      }
-    }
-
-    return () => {
-      if (gameLoopId.current) {
-        cancelAnimationFrame(gameLoopId.current);
-      }
-    };
-  }, [gameState]);
-
-  // 跳跃
-  const handleJump = () => {
-    if (gameState === "start") {
-      setGameState("playing");
-    } else if (gameState === "playing") {
-      setBirdVelocity(jumpForce);
-    } else if (gameState === "gameOver") {
-      // 重新开始游戏
-      setGameState("start");
-      setScore(0);
-    }
-  };
-
-  return (
-    <View style={[styles.gameContainer, isDark && styles.darkGameContainer]}>
-      {/* 得分和高分 */}
-      <View style={styles.scoreContainer}>
-        <Text style={[styles.scoreText, isDark && styles.darkText]}>
-          {score}
-        </Text>
-        <Text style={[styles.highScoreText, isDark && styles.darkText]}>
-          {language === "zh"
-            ? `最高分: ${highScore}`
-            : `High Score: ${highScore}`}
-        </Text>
-      </View>
-
-      {/* 游戏区域 */}
-      <TouchableOpacity
-        style={styles.gameArea}
-        activeOpacity={1}
-        onPress={handleJump}
-      >
-        {/* 背景 */}
-        <View style={styles.background} />
-
-        {/* 管道 */}
-        {pipes.map((pipe) => (
-          <React.Fragment key={pipe.id}>
-            {/* 上管道 */}
-            <View
-              style={[
-                styles.pipe,
-                styles.topPipe,
-                {
-                  left: pipe.x,
-                  height: pipe.topHeight,
-                  width: pipeWidth,
-                  position: "absolute",
-                  top: 0,
-                },
-              ]}
-            >
-              <View style={[styles.pipeCap, styles.topPipeCap]} />
-            </View>
-            {/* 下管道 */}
-            <View
-              style={[
-                styles.pipe,
-                styles.bottomPipe,
-                {
-                  left: pipe.x,
-                  top: pipe.topHeight + pipeGap,
-                  height: gameHeight - (pipe.topHeight + pipeGap) - 50,
-                  width: pipeWidth,
-                  position: "absolute",
-                },
-              ]}
-            >
-              <View style={[styles.pipeCap, styles.bottomPipeCap]} />
-            </View>
-          </React.Fragment>
-        ))}
-
-        {/* 鸟 */}
-        <View
-          style={[
-            styles.bird,
-            {
-              top: birdY,
-              left: gameWidth / 4,
-              width: birdSize,
-              height: birdSize,
-              position: "absolute",
-              zIndex: 10,
-            },
-          ]}
-        >
-          <View style={styles.birdBody}>
-            <View style={styles.birdEye} />
-            <View style={styles.birdBeak} />
-          </View>
-        </View>
-
-        {/* 地面 */}
-        <View style={[styles.ground, isDark && styles.darkGround]} />
-
-        {/* 开始界面 */}
-        {gameState === "start" && (
-          <View style={styles.startScreen}>
-            <Text style={[styles.startTitle, isDark && styles.darkText]}>
-              Flappy Bird
-            </Text>
-            <Text style={[styles.startSubtitle, isDark && styles.darkText]}>
-              {language === "zh" ? "点击屏幕开始游戏" : "Tap screen to start"}
-            </Text>
-          </View>
-        )}
-
-        {/* 游戏结束界面 */}
-        {gameState === "gameOver" && (
-          <View style={styles.gameOverScreen}>
-            <Text style={[styles.gameOverTitle, isDark && styles.darkText]}>
-              {language === "zh" ? "游戏结束" : "Game Over"}
-            </Text>
-            <Text style={[styles.gameOverScore, isDark && styles.darkText]}>
- e}`
-                : `High Score: ${highScore}`}
-            </Text>
-            <TouchableOpacity
-              style={[styles.restartButton, isDark && styles.darkRestartButton]}
-              onPress={handleJump}
-            >
-              <Text style={styles.restartButtonText}>
-                {language === "zh" ? "重新开始" : "Restart"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </TouchableOpacity>
-    </View>
-  );
-};
 
 // 导入xlsx库
 import * as XLSX from "xlsx";
@@ -482,18 +148,63 @@ const CanvasMap = ({ cities, isDark, onCityPress, targetCity }) => {
   const [lastDistance, setLastDistance] = useState(0);
   const [isMouseDragging, setIsMouseDragging] = useState(false);
   const [lastMousePosition, setLastMousePosition] = useState({ x: 0, y: 0 });
+  const animationRef = useRef(null);
 
-  // 定位到目标城市
+  // 定位到目标城市（带动画效果）
   useEffect(() => {
     if (targetCity) {
-      // 计算新的位置，使目标城市居中
       const canvasWidth = 800;
       const canvasHeight = 600;
-      const newX = canvasWidth / 2 - targetCity.x * scale;
-      const newY = canvasHeight / 2 - targetCity.y * scale;
-      setPosition({ x: newX, y: newY });
+      const targetScale = 1.5;
+      const targetX = canvasWidth / 2 - targetCity.x * targetScale;
+      const targetY = canvasHeight / 2 - targetCity.y * targetScale;
+      
+      // 动画持续时间（毫秒）
+      const duration = 1000;
+      const startTime = Date.now();
+      const startScale = scale;
+      const startX = position.x;
+      const startY = position.y;
+      
+      // 清理之前的动画
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      
+      // 动画函数
+      const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // 使用缓动函数使动画更自然
+        const easeOutCubic = 1 - Math.pow(1 - progress, 3);
+        
+        // 计算当前值
+        const currentScale = startScale + (targetScale - startScale) * easeOutCubic;
+        const currentX = startX + (targetX - startX) * easeOutCubic;
+        const currentY = startY + (targetY - startY) * easeOutCubic;
+        
+        // 更新状态
+        setScale(currentScale);
+        setPosition({ x: currentX, y: currentY });
+        
+        // 继续动画
+        if (progress < 1) {
+          animationRef.current = requestAnimationFrame(animate);
+        }
+      };
+      
+      // 开始动画
+      animationRef.current = requestAnimationFrame(animate);
     }
-  }, [targetCity, scale]);
+    
+    // 清理函数
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [targetCity]);
 
   // 绘制地图
   useEffect(() => {
@@ -793,15 +504,28 @@ const ThreeKingdomsGame = ({ language, isDark }) => {
           const x = city.position_x || city.position_X || city.PositionX || 50 + (index % 8) * 60;
           const y = city.position_y || city.position_Y || city.PositionY || 50 + Math.floor(index / 8) * 70;
           
-          // 获取君主ID和名称
-          const forceId = city.owerId || city.ower_id || city.OwerID || city.forceId || city.force_id || city.君主ID;
-          const forceName = forceMap[forceId] || ''; // 君主ID不存在时，势力名称为空白
+          // 获取城市ID
+          const cityId = city.id;
           
-          // 使用君主表中的颜色
-          const color = forceColorMap[forceId] || "#999999"; // 君主ID不存在时，使用灰色作为空白颜色
+          // 查找拥有该城市的君主
+          let forceId = null;
+          let forceName = '';
+          let color = "#999999";
+          
+          for (const force of forcesData) {
+            if (force.citys) {
+              const cityIds = force.citys.split(',').map(id => id.trim());
+              if (cityIds.includes(cityId)) {
+                forceId = force.id;
+                forceName = force.name;
+                color = force[' color'] || force.color || "#D32F2F";
+                break;
+              }
+            }
+          }
           
           return {
-            id: city.id || index + 1,
+            id: cityId || index + 1,
             name: city.name || `城市${index + 1}`,
             x,
             y,
@@ -815,13 +539,13 @@ const ThreeKingdomsGame = ({ language, isDark }) => {
         
         // 计算每个君主的城市数量
         const cityCounts = {};
-        processedCities.forEach(city => {
-          if (city.forceId) {
-            if (cityCounts[city.forceId]) {
-              cityCounts[city.forceId]++;
-            } else {
-              cityCounts[city.forceId] = 1;
-            }
+        forcesData.forEach(force => {
+          if (force.citys) {
+            // 分割城市ID列表并计算数量
+            const cityIds = force.citys.split(',').filter(id => id.trim() !== '');
+            cityCounts[String(force.id)] = cityIds.length;
+          } else {
+            cityCounts[String(force.id)] = 0;
           }
         });
         setForceCityCounts(cityCounts);
@@ -891,7 +615,7 @@ const ThreeKingdomsGame = ({ language, isDark }) => {
             <View style={styles.loadingContainer}>
               <Text style={[styles.loadingText, isDark && styles.darkText]}>
                 {language === "zh"
-                  ? "加载城市数据中..."
+                  ? "加载城池数据中..."
                   : "Loading city data..."}
               </Text>
             </View>
@@ -906,7 +630,7 @@ const ThreeKingdomsGame = ({ language, isDark }) => {
         </View>
       </View>
 
-      {/* 城市详情 */}
+      {/* 城池详情 */}
       {selectedCity && (
         <View style={[styles.cityDetail, isDark && styles.darkCityDetail]}>
           <Text style={[styles.cityDetailTitle, isDark && styles.darkText]}>
@@ -957,20 +681,25 @@ const ThreeKingdomsGame = ({ language, isDark }) => {
             </Text>
             <View style={styles.forceList}>
               {forces.map((force) => {
-                const cityCount = forceCityCounts[force.id] || 0;
+                // 确保使用字符串类型的君主ID来查找城市数量
+                const forceIdStr = String(force.id);
+                const cityCount = forceCityCounts[forceIdStr] || 0;
                 return (
                   <TouchableOpacity
                     key={force.id}
                     style={[styles.forceItem, isDark && styles.darkForceItem]}
                     onPress={() => handleForceSelect(force)}
                   >
-                    <View style={[styles.forceColor, { backgroundColor: force.color || force.Color || "#D32F2F" }]} />
+                    <View style={styles.forceFlag}>
+                      <View style={[styles.flagPole]} />
+                      <View style={[styles.flag, { backgroundColor: force[' color'] || force.color || "#D32F2F" }]} />
+                    </View>
                     <View style={styles.forceInfo}>
                       <Text style={[styles.forceName, isDark && styles.darkText]}>
                         {force.name}
                       </Text>
                       <Text style={[styles.forceCityCount, isDark && styles.darkText]}>
-                        {language === "zh" ? `城市数量: ${cityCount}` : `Cities: ${cityCount}`}
+                        {language === "zh" ? `城池数量: ${cityCount}` : `Cities: ${cityCount}`}
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -1081,12 +810,6 @@ const HomeScreen = () => {
   }, []);
 
   const apps = [
-    {
-      id: "flappybird",
-      name: language === "zh" ? "跳跃鸟" : "Flappy Bird",
-      icon: "flappybird",
-      color: "#FFEB3B",
-    },
     {
       id: "threekingdoms",
       name: language === "zh" ? "三国志" : "Three Kingdoms",
@@ -2029,11 +1752,26 @@ const styles = StyleSheet.create({
   darkForceItem: {
     borderBottomColor: "#333",
   },
-  forceColor: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+  forceFlag: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: 12,
+  },
+  flagPole: {
+    position: "absolute",
+    width: 3,
+    height: 30,
+    backgroundColor: "#333",
+    left: 10,
+  },
+  flag: {
+    width: 25,
+    height: 15,
+    borderTopRightRadius: 2,
+    borderBottomRightRadius: 2,
+    marginLeft: 10,
   },
   forceInfo: {
     flex: 1,

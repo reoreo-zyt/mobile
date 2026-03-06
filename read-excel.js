@@ -1,7 +1,7 @@
 const XLSX = require('xlsx');
 
 // 读取Excel文件
-const workbook = XLSX.readFile('./assets/data/311_data.xlsx');
+const workbook = XLSX.readFile('./public/data/311_data.xlsx');
 
 // 打印工作表名称
 console.log('Sheet names:', workbook.SheetNames);
