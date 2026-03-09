@@ -35,7 +35,9 @@ const SelectMonarchScreen = () => {
         '/311_data.xlsx',
         '/public/311_data.xlsx',
         'https://localhost:8081/311_data.xlsx',
-        'https://localhost:8081/public/311_data.xlsx'
+        'https://localhost:8081/public/311_data.xlsx',
+        'https://localhost:8082/311_data.xlsx',
+        'https://localhost:8082/public/311_data.xlsx'
       ];
       
       let data: Uint8Array | null = null;
@@ -78,17 +80,73 @@ const SelectMonarchScreen = () => {
         console.log(`Found ${jsonData.length} monarchs in Excel file`);
         
         // 转换数据格式
+        console.log('Excel data keys:', Object.keys(jsonData[0] || {}));
+        console.log('First item data:', jsonData[0] || {});
+        
         const parsedMonarchs: Monarch[] = jsonData.map((item: any, index: number) => {
           // 计算城池数量
           let cityCount = 0;
-          if (item['citys']) {
-            cityCount = item['citys'].split(',').length;
+          if (item['citys'] || item['cities'] || item['城市']) {
+            const cityField = item['citys'] || item['cities'] || item['城市'];
+            cityCount = cityField.split(',').length;
+          }
+          
+          // 尝试获取颜色字段，支持不同的字段名
+          let color = '#999999';
+          
+          // 支持多种可能的颜色字段名称
+          const colorFields = ['color', 'Color', 'COLOR', '颜色', 'colour', 'Colour', 'COLOUR'];
+          let foundColor = false;
+          
+          for (const field of colorFields) {
+            if (item[field]) {
+              color = item[field];
+              foundColor = true;
+              console.log(`Monarch ${item['name'] || '未知'} color from ${field}: ${color}`);
+              break;
+            }
+          }
+          
+          if (!foundColor) {
+            console.log(`Monarch ${item['name'] || '未知'} has no color field`);
+          }
+          
+          // 确保颜色值是有效的十六进制格式
+          if (typeof color === 'string') {
+            // 如果是颜色名称，转换为十六进制
+            const colorNameMap: { [key: string]: string } = {
+              'red': '#ff0000',
+              'green': '#00ff00',
+              'blue': '#0000ff',
+              'yellow': '#ffff00',
+              'purple': '#800080',
+              'orange': '#ffa500',
+              'pink': '#ffc0cb',
+              'brown': '#a52a2a',
+              'gray': '#808080',
+              'grey': '#808080',
+              'black': '#000000',
+              'white': '#ffffff'
+            };
+            
+            // 转换颜色名称
+            const lowerColor = color.toLowerCase();
+            if (colorNameMap[lowerColor]) {
+              color = colorNameMap[lowerColor];
+              console.log(`Converted color name ${color} to hex: ${color}`);
+            }
+            
+            // 确保是有效的十六进制颜色
+            if (!color.match(/^#[0-9A-Fa-f]{6}$/)) {
+              console.log(`Invalid color format: ${color}, using default gray`);
+              color = '#999999';
+            }
           }
           
           return {
             id: (index + 1).toString(),
-            name: item['name'] || '未知',
-            cityColor: item['color'] || '#999999',
+            name: item['name'] || item['Name'] || item['NAME'] || item['君主'] || '未知',
+            cityColor: color,
             cityCount: cityCount
           };
         });
