@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as XLSX from 'xlsx';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface Monarch {
   id: string;
@@ -13,31 +13,14 @@ interface Monarch {
 
 const SelectMonarchScreen = () => {
   const router = useRouter();
+  const colorScheme = useColorScheme();
   const [monarchs, setMonarchs] = useState<Monarch[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(colorScheme === 'dark');
 
   useEffect(() => {
-    const init = async () => {
-      await loadSettings();
-      await loadMonarchs();
-    };
-    init();
+    loadMonarchs();
   }, []);
-
-  const loadSettings = async () => {
-    try {
-      // 检查 AsyncStorage 是否可用
-      if (AsyncStorage) {
-        const savedDarkMode = await AsyncStorage.getItem('isDarkMode');
-        if (savedDarkMode !== null) {
-          setIsDarkMode(savedDarkMode === 'true');
-        }
-      }
-    } catch (error) {
-      console.error('Error loading settings:', error);
-    }
-  };
 
   const loadMonarchs = async () => {
     try {

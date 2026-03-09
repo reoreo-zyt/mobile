@@ -2,14 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, Switch } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const GameScreen = () => {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(colorScheme === 'dark');
   const [language, setLanguage] = useState('zh'); // zh: 中文, en: 英文
 
   const translations = {
@@ -45,51 +44,6 @@ const GameScreen = () => {
 
   const t = translations[language];
 
-  // 从 AsyncStorage 中读取设置
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const loadSettings = async () => {
-    try {
-      // 检查 AsyncStorage 是否可用
-      if (AsyncStorage) {
-        const savedDarkMode = await AsyncStorage.getItem('isDarkMode');
-        const savedLanguage = await AsyncStorage.getItem('language');
-        
-        if (savedDarkMode !== null) {
-          setIsDarkMode(savedDarkMode === 'true');
-        } else {
-          // 如果没有保存的设置，使用系统的颜色方案
-          setIsDarkMode(colorScheme === 'dark');
-        }
-        
-        if (savedLanguage !== null) {
-          setLanguage(savedLanguage);
-        }
-      } else {
-        // 如果 AsyncStorage 不可用，使用系统的颜色方案
-        setIsDarkMode(colorScheme === 'dark');
-      }
-    } catch (error) {
-      console.error('Error loading settings:', error);
-      // 如果读取失败，使用系统的颜色方案
-      setIsDarkMode(colorScheme === 'dark');
-    }
-  };
-
-  const saveSettings = async () => {
-    try {
-      // 检查 AsyncStorage 是否可用
-      if (AsyncStorage) {
-        await AsyncStorage.setItem('isDarkMode', isDarkMode.toString());
-        await AsyncStorage.setItem('language', language);
-      }
-    } catch (error) {
-      console.error('Error saving settings:', error);
-    }
-  };
-
   const handleStartGame = () => {
     setShowSaveModal(true);
   };
@@ -113,12 +67,10 @@ const GameScreen = () => {
 
   const handleDarkModeToggle = (value: boolean) => {
     setIsDarkMode(value);
-    saveSettings();
   };
 
   const handleLanguageChange = (newLanguage: string) => {
     setLanguage(newLanguage);
-    saveSettings();
   };
 
   return (
