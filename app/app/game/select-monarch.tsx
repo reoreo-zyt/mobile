@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from '
 import { useRouter } from 'expo-router';
 import * as XLSX from 'xlsx';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import * as FileSystem from 'expo-file-system';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 interface Monarch {
   id: string;
@@ -188,12 +188,17 @@ const SelectMonarchScreen = () => {
   const handleSelectMonarch = (monarch: Monarch) => {
     // 实现选择君主的功能
     console.log('Selected monarch:', monarch);
+    // 跳转到游戏地图界面
+    router.push({
+      pathname: '/game/game-map',
+      params: { monarch: encodeURIComponent(JSON.stringify(monarch)) }
+    });
   };
 
   if (loading) {
     return (
       <View style={[styles.container, isDarkMode && styles.darkContainer]}>
-        <Text style={[styles.loadingText, isDarkMode && styles.darkLoadingText]}>加载中...</Text>
+        <LoadingSpinner text="加载君主列表中..." />
       </View>
     );
   }
