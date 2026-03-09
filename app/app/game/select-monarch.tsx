@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from '
 import { useRouter } from 'expo-router';
 import * as XLSX from 'xlsx';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import * as FileSystem from 'expo-file-system';
 
 interface Monarch {
   id: string;
@@ -24,26 +25,102 @@ const SelectMonarchScreen = () => {
 
   const loadMonarchs = async () => {
     try {
-      // 直接使用模拟数据，避免 react-native-fs 相关的错误
-      const mockMonarchs: Monarch[] = [
-        { id: '1', name: '曹操', cityColor: '#ff0000', cityCount: 10 },
-        { id: '2', name: '刘备', cityColor: '#00ff00', cityCount: 5 },
-        { id: '3', name: '孙权', cityColor: '#0000ff', cityCount: 8 },
-        { id: '4', name: '袁绍', cityColor: '#ff8800', cityCount: 7 },
-        { id: '5', name: '袁术', cityColor: '#8800ff', cityCount: 4 },
-        { id: '6', name: '董卓', cityColor: '#ff00ff', cityCount: 6 },
-        { id: '7', name: '吕布', cityColor: '#00ffff', cityCount: 3 },
-        { id: '8', name: '刘表', cityColor: '#ffff00', cityCount: 5 },
+      console.log('Loading monarch data from Excel file...');
+      
+      // 尝试使用不同的路径加载 Excel 文件
+      const possiblePaths = [
+        '311_data.xlsx',
+        './311_data.xlsx',
+        './public/311_data.xlsx',
+        '/311_data.xlsx',
+        '/public/311_data.xlsx',
+        'https://localhost:8081/311_data.xlsx',
+        'https://localhost:8081/public/311_data.xlsx'
       ];
-      setMonarchs(mockMonarchs);
+      
+      let data: Uint8Array | null = null;
+      let successfulPath: string | null = null;
+      
+      for (const path of possiblePaths) {
+        try {
+          console.log(`Trying to fetch Excel file from: ${path}`);
+          const response = await fetch(path);
+          
+          if (!response.ok) {
+            console.log(`Fetch failed with status: ${response.status}`);
+            continue;
+          }
+          
+          const arrayBuffer = await response.arrayBuffer();
+          data = new Uint8Array(arrayBuffer);
+          successfulPath = path;
+          console.log(`Excel file fetched successfully from: ${path}`);
+          break;
+        } catch (fetchError) {
+          console.log(`Error fetching from ${path}:`, fetchError);
+          continue;
+        }
+      }
+      
+      if (data) {
+        // 解析 Excel 文件
+        console.log('Parsing Excel file...');
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        // 检查是否存在君主表
+        if (!workbook.Sheets['君主表']) {
+          throw new Error('君主表 not found in Excel file');
+        }
+        
+        const worksheet = workbook.Sheets['君主表'];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        
+        console.log(`Found ${jsonData.length} monarchs in Excel file`);
+        
+        // 转换数据格式
+        const parsedMonarchs: Monarch[] = jsonData.map((item: any, index: number) => {
+          // 计算城池数量
+          let cityCount = 0;
+          if (item['citys']) {
+            cityCount = item['citys'].split(',').length;
+          }
+          
+          return {
+            id: (index + 1).toString(),
+            name: item['name'] || '未知',
+            cityColor: item['color'] || '#999999',
+            cityCount: cityCount
+          };
+        });
+        
+        console.log('Monarch data processed successfully');
+        setMonarchs(parsedMonarchs);
+      } else {
+        // 备用方案：使用模拟数据
+        console.log('Using mock data as fallback...');
+        const mockMonarchs: Monarch[] = [
+          { id: '1', name: '曹操', cityColor: '#ff0000', cityCount: 5 },
+          { id: '2', name: '刘备', cityColor: '#00ff00', cityCount: 3 },
+          { id: '3', name: '孙权', cityColor: '#0000ff', cityCount: 4 },
+          { id: '4', name: '袁绍', cityColor: '#ffff00', cityCount: 6 },
+          { id: '5', name: '袁术', cityColor: '#ff00ff', cityCount: 2 }
+        ];
+        
+        console.log('Using mock monarch data');
+        setMonarchs(mockMonarchs);
+      }
     } catch (error) {
       console.error('Error loading monarchs:', error);
-      // 如果读取失败，使用模拟数据
+      // 提供详细的错误信息，但不抛出异常，使用模拟数据
+      console.log('Using mock data due to error...');
       const mockMonarchs: Monarch[] = [
-        { id: '1', name: '曹操', cityColor: '#ff0000', cityCount: 10 },
-        { id: '2', name: '刘备', cityColor: '#00ff00', cityCount: 5 },
-        { id: '3', name: '孙权', cityColor: '#0000ff', cityCount: 8 },
+        { id: '1', name: '曹操', cityColor: '#ff0000', cityCount: 5 },
+        { id: '2', name: '刘备', cityColor: '#00ff00', cityCount: 3 },
+        { id: '3', name: '孙权', cityColor: '#0000ff', cityCount: 4 },
+        { id: '4', name: '袁绍', cityColor: '#ffff00', cityCount: 6 },
+        { id: '5', name: '袁术', cityColor: '#ff00ff', cityCount: 2 }
       ];
+      
       setMonarchs(mockMonarchs);
     } finally {
       setLoading(false);
