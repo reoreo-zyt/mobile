@@ -40,7 +40,7 @@ const SelectMonarchScreen = () => {
         'https://localhost:8082/public/311_data.xlsx'
       ];
       
-      let data: Uint8Array | null = null;
+      let data: ArrayBuffer | null = null;
       let successfulPath: string | null = null;
       
       for (const path of possiblePaths) {
@@ -53,8 +53,7 @@ const SelectMonarchScreen = () => {
             continue;
           }
           
-          const arrayBuffer = await response.arrayBuffer();
-          data = new Uint8Array(arrayBuffer);
+          data = await response.arrayBuffer();
           successfulPath = path;
           console.log(`Excel file fetched successfully from: ${path}`);
           break;
@@ -64,95 +63,110 @@ const SelectMonarchScreen = () => {
         }
       }
       
-      if (data) {
+      if (data && data instanceof ArrayBuffer) {
         // 解析 Excel 文件
         console.log('Parsing Excel file...');
-        const workbook = XLSX.read(data, { type: 'array' });
-        
-        // 检查是否存在君主表
-        if (!workbook.Sheets['君主表']) {
-          throw new Error('君主表 not found in Excel file');
-        }
-        
-        const worksheet = workbook.Sheets['君主表'];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
-        
-        console.log(`Found ${jsonData.length} monarchs in Excel file`);
-        
-        // 转换数据格式
-        console.log('Excel data keys:', Object.keys(jsonData[0] || {}));
-        console.log('First item data:', jsonData[0] || {});
-        
-        const parsedMonarchs: Monarch[] = jsonData.map((item: any, index: number) => {
-          // 计算城池数量
-          let cityCount = 0;
-          if (item['citys'] || item['cities'] || item['城市']) {
-            const cityField = item['citys'] || item['cities'] || item['城市'];
-            cityCount = cityField.split(',').length;
+        try {
+          const workbook = XLSX.read(data, { type: 'array' });
+          
+          // 检查是否存在君主表
+          if (!workbook.Sheets['君主表']) {
+            throw new Error('君主表 not found in Excel file');
           }
           
-          // 尝试获取颜色字段，支持不同的字段名
-          let color = '#999999';
+          const worksheet = workbook.Sheets['君主表'];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
           
-          // 支持多种可能的颜色字段名称
-          const colorFields = ['color', 'Color', 'COLOR', '颜色', 'colour', 'Colour', 'COLOUR'];
-          let foundColor = false;
+          console.log(`Found ${jsonData.length} monarchs in Excel file`);
           
-          for (const field of colorFields) {
-            if (item[field]) {
-              color = item[field];
-              foundColor = true;
-              console.log(`Monarch ${item['name'] || '未知'} color from ${field}: ${color}`);
-              break;
+          // 转换数据格式
+          console.log('Excel data keys:', Object.keys(jsonData[0] || {}));
+          console.log('First item data:', jsonData[0] || {});
+          
+          const parsedMonarchs: Monarch[] = jsonData.map((item: any, index: number) => {
+            // 计算城池数量
+            let cityCount = 0;
+            if (item['citys'] || item['cities'] || item['城市']) {
+              const cityField = item['citys'] || item['cities'] || item['城市'];
+              cityCount = cityField.split(',').length;
             }
-          }
-          
-          if (!foundColor) {
-            console.log(`Monarch ${item['name'] || '未知'} has no color field`);
-          }
-          
-          // 确保颜色值是有效的十六进制格式
-          if (typeof color === 'string') {
-            // 如果是颜色名称，转换为十六进制
-            const colorNameMap: { [key: string]: string } = {
-              'red': '#ff0000',
-              'green': '#00ff00',
-              'blue': '#0000ff',
-              'yellow': '#ffff00',
-              'purple': '#800080',
-              'orange': '#ffa500',
-              'pink': '#ffc0cb',
-              'brown': '#a52a2a',
-              'gray': '#808080',
-              'grey': '#808080',
-              'black': '#000000',
-              'white': '#ffffff'
+            
+            // 尝试获取颜色字段，支持不同的字段名
+            let color = '#999999';
+            
+            // 支持多种可能的颜色字段名称
+            const colorFields = ['color', 'Color', 'COLOR', '颜色', 'colour', 'Colour', 'COLOUR'];
+            let foundColor = false;
+            
+            for (const field of colorFields) {
+              if (item[field]) {
+                color = item[field];
+                foundColor = true;
+                console.log(`Monarch ${item['name'] || '未知'} color from ${field}: ${color}`);
+                break;
+              }
+            }
+            
+            if (!foundColor) {
+              console.log(`Monarch ${item['name'] || '未知'} has no color field`);
+            }
+            
+            // 确保颜色值是有效的十六进制格式
+            if (typeof color === 'string') {
+              // 如果是颜色名称，转换为十六进制
+              const colorNameMap: { [key: string]: string } = {
+                'red': '#ff0000',
+                'green': '#00ff00',
+                'blue': '#0000ff',
+                'yellow': '#ffff00',
+                'purple': '#800080',
+                'orange': '#ffa500',
+                'pink': '#ffc0cb',
+                'brown': '#a52a2a',
+                'gray': '#808080',
+                'grey': '#808080',
+                'black': '#000000',
+                'white': '#ffffff'
+              };
+              
+              // 转换颜色名称
+              const lowerColor = color.toLowerCase();
+              if (colorNameMap[lowerColor]) {
+                color = colorNameMap[lowerColor];
+                console.log(`Converted color name ${color} to hex: ${color}`);
+              }
+              
+              // 确保是有效的十六进制颜色
+              if (!color.match(/^#[0-9A-Fa-f]{6}$/)) {
+                console.log(`Invalid color format: ${color}, using default gray`);
+                color = '#999999';
+              }
+            }
+            
+            return {
+              id: (index + 1).toString(),
+              name: item['name'] || item['Name'] || item['NAME'] || item['君主'] || '未知',
+              cityColor: color,
+              cityCount: cityCount
             };
-            
-            // 转换颜色名称
-            const lowerColor = color.toLowerCase();
-            if (colorNameMap[lowerColor]) {
-              color = colorNameMap[lowerColor];
-              console.log(`Converted color name ${color} to hex: ${color}`);
-            }
-            
-            // 确保是有效的十六进制颜色
-            if (!color.match(/^#[0-9A-Fa-f]{6}$/)) {
-              console.log(`Invalid color format: ${color}, using default gray`);
-              color = '#999999';
-            }
-          }
+          });
           
-          return {
-            id: (index + 1).toString(),
-            name: item['name'] || item['Name'] || item['NAME'] || item['君主'] || '未知',
-            cityColor: color,
-            cityCount: cityCount
-          };
-        });
-        
-        console.log('Monarch data processed successfully');
-        setMonarchs(parsedMonarchs);
+          console.log('Monarch data processed successfully');
+          setMonarchs(parsedMonarchs);
+        } catch (parseError) {
+          console.error('Error parsing Excel file:', parseError);
+          // 使用模拟数据
+          console.log('Using mock monarch data due to parsing error...');
+          const mockMonarchs: Monarch[] = [
+            { id: '1', name: '曹操', cityColor: '#ff0000', cityCount: 5 },
+            { id: '2', name: '刘备', cityColor: '#00ff00', cityCount: 3 },
+            { id: '3', name: '孙权', cityColor: '#0000ff', cityCount: 4 },
+            { id: '4', name: '袁绍', cityColor: '#ffff00', cityCount: 6 },
+            { id: '5', name: '袁术', cityColor: '#ff00ff', cityCount: 2 }
+          ];
+          
+          setMonarchs(mockMonarchs);
+        }
       } else {
         // 备用方案：使用模拟数据
         console.log('Using mock data as fallback...');
