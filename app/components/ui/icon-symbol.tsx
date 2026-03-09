@@ -18,19 +18,6 @@ const MAPPING = {
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
-  'calendar': 'calendar-today',
-  'cloud.sun': 'wb-sunny',
-  'photo': 'photo',
-  'gear': 'settings',
-  'clock': 'access-time',
-  'note.text': 'note',
-  'signal': 'signal-cellular-alt',
-  'wifi': 'wifi',
-  'battery.100': 'battery-full',
-  'chevron.left': 'chevron-left',
-  'message': 'chat',
-  'phone': 'phone',
-  'bubble.left': 'sms',
 } as IconMapping;
 
 /**
