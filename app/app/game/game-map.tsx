@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, PanResponder, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as XLSX from 'xlsx';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -33,14 +33,9 @@ const GameMapScreen = () => {
   const [loading, setLoading] = useState(true);
   const [isDarkMode, setIsDarkMode] = useState(colorScheme === 'dark');
   const [selectedCity, setSelectedCity] = useState<City | null>(null);
-  const [scale, setScale] = useState(1);
-  const [offsetX, setOffsetX] = useState(0);
-  const [offsetY, setOffsetY] = useState(0);
   const [year, setYear] = useState(189);
   const [month, setMonth] = useState(1);
   const [mapReady, setMapReady] = useState(false);
-  const [touchX, setTouchX] = useState(0);
-  const [touchY, setTouchY] = useState(0);
   
   // 计算政令数量
   const calculateDecreeCount = () => {
@@ -49,29 +44,6 @@ const GameMapScreen = () => {
     const extraCities = Math.max(0, selectedMonarch.cityCount - 3);
     return Math.min(baseDecrees + extraCities, 5);
   };
-  
-  // 处理地图拖动
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (event) => {
-        setTouchX(event.nativeEvent.pageX);
-        setTouchY(event.nativeEvent.pageY);
-      },
-      onPanResponderMove: (event) => {
-        const deltaX = event.nativeEvent.pageX - touchX;
-        const deltaY = event.nativeEvent.pageY - touchY;
-        setOffsetX(prev => prev + deltaX);
-        setOffsetY(prev => prev + deltaY);
-        setTouchX(event.nativeEvent.pageX);
-        setTouchY(event.nativeEvent.pageY);
-      },
-      onPanResponderRelease: () => {
-        // 可以添加惯性效果等
-      },
-    })
-  ).current;
   
   useEffect(() => {
     // 从参数中获取选中的君主信息
@@ -207,49 +179,6 @@ const GameMapScreen = () => {
     }
   };
   
-  useEffect(() => {
-    // 当选择君主后，居中显示君主的城市
-    if (selectedMonarch && mapReady && cities.length > 0) {
-      console.log('Centering map on monarch cities');
-      
-      // 找到君主的所有城市
-      const monarchCities = cities.filter(city => city.ownerId === selectedMonarch.id);
-      
-      if (monarchCities.length > 0) {
-        // 计算城市的平均位置
-        let totalX = 0;
-        let totalY = 0;
-        
-        monarchCities.forEach(city => {
-          totalX += city.position_x;
-          totalY += city.position_y;
-        });
-        
-        const avgX = totalX / monarchCities.length;
-        const avgY = totalY / monarchCities.length;
-        
-        console.log('Monarch cities average position:', avgX, avgY);
-        
-        // 计算偏移量，使君主的城市居中显示
-        const centerX = screenWidth / 2;
-        const centerY = (screenHeight - 100) / 2;
-        
-        const newOffsetX = centerX - (avgX * 50 * scale);
-        const newOffsetY = centerY - (avgY * 50 * scale);
-        
-        setOffsetX(newOffsetX);
-        setOffsetY(newOffsetY);
-        
-        console.log('New offset:', newOffsetX, newOffsetY);
-      }
-    }
-  }, [selectedMonarch, mapReady, cities, scale]);
-  
-  const handleZoom = (factor: number) => {
-    const newScale = Math.max(0.5, Math.min(3, scale * factor));
-    setScale(newScale);
-  };
-  
   if (loading) {
     return (
       <View style={[styles.container, isDarkMode && styles.darkContainer]}>
@@ -279,114 +208,74 @@ const GameMapScreen = () => {
       </View>
       
       {/* 地图区域 */}
-      <View style={styles.mapContainer} {...panResponder.panHandlers}>
-        {/* 地图背景 */}
-        <View style={styles.mapBackground} />
-        
-        {/* 城池 */}
-        {cities.map((city) => {
-          const centerX = screenWidth / 2;
-          const centerY = (screenHeight - 100) / 2;
-          const x = centerX + (city.position_x * 50 * scale) + offsetX;
-          const y = centerY + (city.position_y * 50 * scale) + offsetY;
-          
-          let cityColor = city.color;
-          if (city.ownerId === '0') {
-            cityColor = '#999999'; // 未占领的城池为灰色
-          } else if (selectedMonarch && city.ownerId === selectedMonarch.id) {
-            cityColor = selectedMonarch.cityColor; // 我方城池使用君主颜色
-          }
-          
-          return (
-            <TouchableOpacity
-              key={city.id}
-              style={[
-                styles.cityContainer,
-                {
-                  left: x - 20 * scale,
-                  top: y - 40 * scale,
-                  width: 40 * scale,
-                  height: 60 * scale,
+      <View style={styles.mapContainer}>
+        <ScrollView 
+          style={styles.scrollView}
+          horizontal={true}
+          bounces={false}
+        >
+          <ScrollView 
+            style={styles.scrollViewInner}
+            bounces={false}
+          >
+            <View style={styles.mapContent}>
+              {/* 城池 */}
+              {cities.map((city) => {
+                const x = city.position_x;
+                const y = city.position_y;
+                
+                let cityColor = city.color;
+                if (city.ownerId === '0') {
+                  cityColor = '#999999';
+                } else if (selectedMonarch && city.ownerId === selectedMonarch.id) {
+                  cityColor = selectedMonarch.cityColor;
                 }
-              ]}
-              onPress={() => setSelectedCity(city)}
-            >
-              {/* 城池底座（丹青） */}
-              <View 
-                style={[
-                  styles.cityCircle, 
-                  { 
-                    backgroundColor: cityColor,
-                    width: 30 * scale,
-                    height: 30 * scale,
-                    borderRadius: 15 * scale,
-                    borderWidth: 2 * scale,
-                    top: 10 * scale,
-                    left: 5 * scale,
-                  }
-                ]} 
-              />
-              
-              {/* 旗杆 */}
-              <View 
-                style={[
-                  styles.flagPole, 
-                  { 
-                    width: 2 * scale,
-                    height: 15 * scale,
-                    backgroundColor: '#8B4513',
-                    top: 5 * scale,
-                    left: 19 * scale,
-                  }
-                ]} 
-              />
-              
-              {/* 旗帜 */}
-              <View 
-                style={[
-                  styles.flag, 
-                  { 
-                    width: 10 * scale,
-                    height: 10 * scale,
-                    backgroundColor: cityColor,
-                    top: 0 * scale,
-                    left: 21 * scale,
-                    transform: [{ rotate: '-45deg' }],
-                  }
-                ]} 
-              />
-              
-              {/* 城市名称 */}
-              <Text 
-                style={[
-                  styles.cityNameText,
-                  {
-                    top: 40 * scale,
-                    fontSize: 12 * scale,
-                  }
-                ]}
-              >
-                {city.name}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-        
-        {/* 缩放控制 */}
-        <View style={styles.zoomControls}>
-          <TouchableOpacity
-            style={[styles.zoomButton, isDarkMode && styles.darkZoomButton]}
-            onPress={() => handleZoom(1.2)}
-          >
-            <Text style={[styles.zoomButtonText, isDarkMode && styles.darkText]}>+</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.zoomButton, isDarkMode && styles.darkZoomButton]}
-            onPress={() => handleZoom(0.8)}
-          >
-            <Text style={[styles.zoomButtonText, isDarkMode && styles.darkText]}>-</Text>
-          </TouchableOpacity>
-        </View>
+                
+                return (
+                  <TouchableOpacity
+                    key={city.id}
+                    style={[
+                      styles.cityContainer,
+                      {
+                        left: x,
+                        top: y,
+                      }
+                    ]}
+                    onPress={() => setSelectedCity(city)}
+                  >
+                    <View 
+                      style={[
+                        styles.cityCircle, 
+                        { 
+                          backgroundColor: cityColor,
+                        }
+                      ]} 
+                    />
+                    <View 
+                      style={[
+                        styles.flagPole, 
+                        { 
+                          backgroundColor: '#8B4513',
+                        }
+                      ]} 
+                    />
+                    <View 
+                      style={[
+                        styles.flag, 
+                        { 
+                          backgroundColor: cityColor,
+                        }
+                      ]} 
+                    />
+                    <Text style={styles.cityNameText}>
+                      {city.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </ScrollView>
+        </ScrollView>
       </View>
       
       {/* 城池信息弹窗 */}
@@ -475,127 +364,69 @@ const styles = StyleSheet.create({
   },
   mapContainer: {
     flex: 1,
-    position: 'relative',
+    backgroundColor: '#f0e6d2',
   },
-  canvas: {
-    width: '100%',
-    height: '100%',
-    display: 'block',
-    backgroundColor: '#f0e6d2', // 宣纸色
-  },
-  mapView: {
+  scrollView: {
     flex: 1,
-    backgroundColor: '#f0e6d2', // 宣纸色
+  },
+  scrollViewInner: {
+    flex: 1,
+  },
+  mapContent: {
+    width: 2000,
+    height: 1500,
     position: 'relative',
   },
-  cityView: {
+  cityContainer: {
     position: 'absolute',
+    width: 40,
+    height: 60,
     alignItems: 'center',
   },
   cityCircle: {
+    position: 'absolute',
     width: 30,
     height: 30,
     borderRadius: 15,
     borderWidth: 2,
     borderColor: '#333',
+    top: 15,
+    left: 5,
   },
   flagPole: {
-    width: 2,
-    backgroundColor: '#8B4513',
     position: 'absolute',
-    top: -15,
-    left: 14,
+    width: 2,
+    height: 15,
+    backgroundColor: '#8B4513',
+    top: 0,
+    left: 19,
   },
   flag: {
     position: 'absolute',
-    top: -25,
-    left: 16,
     width: 10,
     height: 10,
+    top: -5,
+    left: 15,
     transform: [{ rotate: '-45deg' }],
-  },
-  cityName: {
-    position: 'absolute',
-    textAlign: 'center',
-    color: '#333',
-  },
-  cityHitAreas: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  cityHitArea: {
-    position: 'absolute',
   },
   cityNameText: {
     position: 'absolute',
-    textAlign: 'center',
+    top: 45,
+    fontSize: 12,
     color: '#333',
-    width: '100%',
+    textAlign: 'center',
+    width: 60,
   },
-  mapBackground: {
+  cityLabels: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#f0e6d2', // 宣纸色
-  },
-  cityContainer: {
-    position: 'absolute',
-    alignItems: 'center',
-  },
-  cityCircle: {
-    position: 'absolute',
-    borderColor: '#333',
-  },
-  flagPole: {
-    position: 'absolute',
-  },
-  flag: {
-    position: 'absolute',
   },
   placeholderText: {
     fontSize: 16,
     color: '#666666', // 灰色
-  },
-  zoomControls: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-  },
-  zoomButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  darkZoomButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(42, 42, 42, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  zoomButtonText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2c2c2c', // 墨色
   },
   cityModal: {
     position: 'absolute',
