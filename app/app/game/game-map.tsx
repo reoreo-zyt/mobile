@@ -40,6 +40,7 @@ const GameMapScreen = () => {
   const [showCityList, setShowCityList] = useState(true);
   const [mapX, setMapX] = useState(0);
   const [mapY, setMapY] = useState(0);
+  const [showSettings, setShowSettings] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const pan = useRef(new Animated.ValueXY()).current;
   
@@ -53,7 +54,17 @@ const GameMapScreen = () => {
   
   // 创建PanResponder处理地图拖动
   const panResponder = PanResponder.create({
-    onStartShouldSetPanResponderCapture: () => false,
+    onStartShouldSetPanResponder: (_, gestureState) => {
+      // 检查是否是点击而不是拖动
+      if (Math.abs(gestureState.dx) < 5 && Math.abs(gestureState.dy) < 5) {
+        // 点击地图时关闭城池列表
+        if (showCityList) {
+          setShowCityList(false);
+        }
+        return false; // 不启动PanResponder
+      }
+      return false;
+    },
     onMoveShouldSetPanResponder: (_, gestureState) => {
       return Math.abs(gestureState.dx) > 5 || Math.abs(gestureState.dy) > 5;
     },
@@ -334,6 +345,31 @@ const GameMapScreen = () => {
     );
   }
   
+  // 处理点击外部关闭城池列表
+  const handleMapPress = () => {
+    if (showCityList) {
+      setShowCityList(false);
+    }
+  };
+
+  // 处理存储游戏
+  const handleSaveGame = () => {
+    // 存储游戏逻辑
+    console.log('存储游戏');
+    setShowSettings(false);
+  };
+
+  // 处理返回主菜单
+  const handleBackToMenu = () => {
+    router.replace('/');
+  };
+
+  // 处理退出游戏
+  const handleExitGame = () => {
+    // 退出游戏逻辑
+    console.log('退出游戏');
+  };
+
   return (
     <View style={[styles.container, isDarkMode && styles.darkContainer]}>
       {/* 顶部信息栏 */}
@@ -344,58 +380,30 @@ const GameMapScreen = () => {
         <Text style={[styles.dateText, isDarkMode && styles.darkText]}>
           {year}年{month}月
         </Text>
-        <View style={styles.decreeContainer}>
-          <Text style={[styles.decreeLabel, isDarkMode && styles.darkText]}>政令:</Text>
-          <View style={styles.decreeIcons}>
-            {Array.from({ length: calculateDecreeCount() }).map((_, index) => (
-              <View key={index} style={[styles.decreeIcon, { backgroundColor: selectedMonarch?.cityColor || '#999999' }]} />
-            ))}
+        <View style={styles.topBarRight}>
+          <View style={styles.decreeContainer}>
+            <Text style={[styles.decreeLabel, isDarkMode && styles.darkText]}>政令:</Text>
+            <View style={styles.decreeIcons}>
+              {Array.from({ length: calculateDecreeCount() }).map((_, index) => (
+                <View key={index} style={[styles.decreeIcon, { backgroundColor: selectedMonarch?.cityColor || '#999999' }]} />
+              ))}
+            </View>
           </View>
+          {/* 设置按钮 */}
+          <TouchableOpacity 
+            style={styles.settingsButton}
+            onPress={() => setShowSettings(!showSettings)}
+          >
+            <Text style={[styles.settingsButtonText, isDarkMode && styles.darkText]}>⚙️</Text>
+          </TouchableOpacity>
         </View>
       </View>
-      
-      {/* 左侧城池列表 - 放在地图后面以显示在上层 */}
-      {showCityList && (
-        <View style={[styles.cityListContainer, isDarkMode && styles.darkCityListContainer, styles.cityListOverlay]}>
-          <View style={styles.cityListHeader}>
-            <Text style={[styles.cityListTitle, isDarkMode && styles.darkText]}>城池列表</Text>
-            <TouchableOpacity onPress={() => setShowCityList(false)}>
-              <Text style={[styles.closeButtonText, isDarkMode && styles.darkText]}>×</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView style={styles.cityList}>
-            {
-            cities
-              .filter(city => selectedMonarch && city.ownerId === selectedMonarch.id)
-              .map((city) => {
-              let cityColor = city.color;
-              if (selectedMonarch && city.ownerId === selectedMonarch.id) {
-                cityColor = selectedMonarch.cityColor;
-              }
-              
-              return (
-                <TouchableOpacity
-                  key={city.id}
-                  style={[styles.cityListItem, isDarkMode && styles.darkCityListItem]}
-                  onPress={() => handleCityListItemPress(city)}
-                >
-                  <View style={[styles.cityListColor, { backgroundColor: cityColor }]} />
-                  <Text style={[styles.cityListName, isDarkMode && styles.darkText]}>{city.name}</Text>
-                  <Text style={[styles.cityListOwner, isDarkMode && styles.darkText]}>
-                    君主: {selectedMonarch?.name || '未知'}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-      )}
       
       {/* 主内容区域 */}
       <View style={styles.mainContent}>
         {/* 地图区域 */}
         <View style={styles.mapContainer}>
-          <View style={styles.scrollView} {...panResponder.panHandlers}>
+          <View style={styles.mapBackground} {...panResponder.panHandlers}>
             <Animated.View 
               style={[
                 styles.mapContent,
@@ -498,6 +506,43 @@ const GameMapScreen = () => {
         </View>
       </View>
       
+      {/* 左侧城池列表 - 放在地图后面以显示在上层 */}
+      {showCityList && (
+        <View style={[styles.cityListContainer, isDarkMode && styles.darkCityListContainer, styles.cityListOverlay]}>
+          <View style={styles.cityListHeader}>
+            <Text style={[styles.cityListTitle, isDarkMode && styles.darkText]}>城池列表</Text>
+            <TouchableOpacity onPress={() => setShowCityList(false)}>
+              <Text style={[styles.closeButtonText, isDarkMode && styles.darkText]}>×</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.cityList}>
+            {
+            cities
+              .filter(city => selectedMonarch && city.ownerId === selectedMonarch.id)
+              .map((city) => {
+              let cityColor = city.color;
+              if (selectedMonarch && city.ownerId === selectedMonarch.id) {
+                cityColor = selectedMonarch.cityColor;
+              }
+              
+              return (
+                <TouchableOpacity
+                  key={city.id}
+                  style={[styles.cityListItem, isDarkMode && styles.darkCityListItem]}
+                  onPress={() => handleCityListItemPress(city)}
+                >
+                  <View style={[styles.cityListColor, { backgroundColor: cityColor }]} />
+                  <Text style={[styles.cityListName, isDarkMode && styles.darkText]}>{city.name}</Text>
+                  <Text style={[styles.cityListOwner, isDarkMode && styles.darkText]}>
+                    君主: {selectedMonarch?.name || '未知'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+      
       {/* 城池信息弹窗 */}
       {selectedCity && (
         <View style={[styles.cityModal, isDarkMode && styles.darkCityModal]}>
@@ -517,13 +562,45 @@ const GameMapScreen = () => {
         </View>
       )}
       
-      {/* 返回按钮 */}
-      <TouchableOpacity
-        style={[styles.backButton, isDarkMode && styles.darkBackButton]}
-        onPress={() => router.back()}
-      >
-        <Text style={[styles.backButtonText, isDarkMode && styles.darkBackButtonText]}>返回</Text>
-      </TouchableOpacity>
+      {/* 设置弹窗 */}
+      {showSettings && (
+        <View style={[styles.settingsModal, isDarkMode && styles.darkSettingsModal]}>
+          <TouchableOpacity 
+            style={styles.settingsModalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowSettings(false)}
+          />
+          <View style={[styles.settingsModalContent, isDarkMode && styles.darkSettingsModalContent]}>
+            <Text style={[styles.settingsModalTitle, isDarkMode && styles.darkText]}>设置</Text>
+            <TouchableOpacity
+              style={[styles.settingsOption, isDarkMode && styles.darkSettingsOption]}
+              onPress={handleSaveGame}
+            >
+              <Text style={[styles.settingsOptionText, isDarkMode && styles.darkText]}>存储游戏</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.settingsOption, isDarkMode && styles.darkSettingsOption]}
+              onPress={handleBackToMenu}
+            >
+              <Text style={[styles.settingsOptionText, isDarkMode && styles.darkText]}>返回主菜单</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.settingsOption, isDarkMode && styles.darkSettingsOption]}
+              onPress={handleExitGame}
+            >
+              <Text style={[styles.settingsOptionText, isDarkMode && styles.darkText]}>退出游戏</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.closeButton, isDarkMode && styles.darkCloseButton]}
+              onPress={() => setShowSettings(false)}
+            >
+              <Text style={[styles.closeButtonText, isDarkMode && styles.darkText]}>关闭</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+      
+
     </View>
   );
 };
@@ -545,6 +622,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#e8e0d0', // 浅宣纸色
     borderBottomWidth: 1,
     borderBottomColor: '#d4d4d0', // 浅灰色
+    zIndex: 50,
   },
   darkTopBar: {
     flexDirection: 'row',
@@ -554,6 +632,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#2a2a2a', // 深灰色
     borderBottomWidth: 1,
     borderBottomColor: '#3a3a3a', // 灰色
+    zIndex: 50,
+  },
+  topBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
+  },
+  settingsButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  settingsButtonText: {
+    fontSize: 20,
   },
   monarchName: {
     fontSize: 18,
@@ -655,10 +748,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0e6d2',
     position: 'relative',
   },
-  scrollView: {
+  mapBackground: {
     flex: 1,
   },
-  verticalScrollView: {
+  scrollView: {
     flex: 1,
   },
   mapContent: {
@@ -875,6 +968,79 @@ const styles = StyleSheet.create({
     color: '#e0e0d8', // 宣纸白
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  settingsModal: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 300,
+  },
+  darkSettingsModal: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 300,
+  },
+  settingsModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  settingsModalContent: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -100 }, { translateY: -100 }],
+    width: 200,
+    backgroundColor: '#ffffff',
+    padding: 20,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  darkSettingsModalContent: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -100 }, { translateY: -100 }],
+    width: 200,
+    backgroundColor: '#2a2a2a',
+    padding: 20,
+    borderRadius: 8,
+  },
+  settingsModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2c2c2c',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  settingsOption: {
+    backgroundColor: '#f0f0e8',
+    padding: 15,
+    borderRadius: 4,
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  darkSettingsOption: {
+    backgroundColor: '#3a3a3a',
+    padding: 15,
+    borderRadius: 4,
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  settingsOptionText: {
+    color: '#2c2c2c',
+    fontSize: 14,
   },
   darkText: {
     color: '#e0e0d8', // 宣纸白
