@@ -53,6 +53,12 @@ const GameMapScreen = () => {
   const [mapX, setMapX] = useState(0);
   const [mapY, setMapY] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
+  const [showGeneralList, setShowGeneralList] = useState(false);
+  const [showInternalAffairs, setShowInternalAffairs] = useState(false);
+  const [currentMonarchIndex, setCurrentMonarchIndex] = useState(0);
+  const [actionPhase, setActionPhase] = useState<'player' | 'ai'>('player');
+  const [actionMessage, setActionMessage] = useState('');
+  const [showActionMessage, setShowActionMessage] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const pan = useRef(new Animated.ValueXY()).current;
   
@@ -293,7 +299,7 @@ const GameMapScreen = () => {
               }
               
               return {
-                id: item['id'],
+                id: item['id'] || (index + 1).toString(),
                 name: item['name'] || item['Name'] || item['NAME'] || item['君主'] || '未知',
                 cityColor: color,
                 cityCount: cityCount
@@ -329,10 +335,17 @@ const GameMapScreen = () => {
             console.log('Excel general data keys:', Object.keys(jsonData[0] || {}));
             console.log('First general item data:', jsonData[0] || {});
             
-            generalsData = jsonData.map((item: any) => ({
-              id: item['id'],
+            generalsData = jsonData.map((item: any, index: number) => ({
+              id: item['id'] || (index + 1).toString(),
               name: item['name'] || item['Name'] || item['NAME'] || '未知',
-              cityId: item['cityId'] || item['city_id'] || item['CityId'] || item['CITYID'] || '0'
+              cityId: item['cityId'] || item['city_id'] || item['CityId'] || item['CITYID'] || '0',
+              work: parseFloat(item['work'] || item['Work'] || item['WORK'] || '0'),
+              born: parseFloat(item['born'] || item['Born'] || item['BORN'] || '0'),
+              command: parseFloat(item['command'] || item['Command'] || item['COMMAND'] || item['统'] || '0'),
+              force: parseFloat(item['force'] || item['Force'] || item['FORCE'] || item['武'] || '0'),
+              intelligence: parseFloat(item['intelligence'] || item['Intelligence'] || item['INTELLIGENCE'] || item['智'] || '0'),
+              politics: parseFloat(item['politics'] || item['Politics'] || item['POLITICS'] || item['政'] || '0'),
+              morality: parseFloat(item['morality'] || item['Morality'] || item['MORALITY'] || item['德'] || '0')
             }));
             
             console.log('General data processed successfully');
@@ -341,14 +354,14 @@ const GameMapScreen = () => {
             console.log('武将表 not found in Excel file, using mock data');
             // 使用模拟数据
             const mockGenerals = [
-              { id: '1', name: '夏侯惇', cityId: '1' },
-              { id: '2', name: '张辽', cityId: '1' },
-              { id: '3', name: '关羽', cityId: '3' },
-              { id: '4', name: '张飞', cityId: '3' },
-              { id: '5', name: '周瑜', cityId: '4' },
-              { id: '6', name: '陆逊', cityId: '4' },
-              { id: '7', name: '袁绍', cityId: '2' },
-              { id: '8', name: '袁术', cityId: '5' }
+              { id: '1', name: '夏侯惇', cityId: '1', work: 189, born: 155, command: 85, force: 90, intelligence: 70, politics: 65, morality: 80 },
+              { id: '2', name: '张辽', cityId: '1', work: 189, born: 169, command: 90, force: 85, intelligence: 80, politics: 70, morality: 85 },
+              { id: '3', name: '关羽', cityId: '3', work: 189, born: 160, command: 95, force: 98, intelligence: 75, politics: 60, morality: 90 },
+              { id: '4', name: '张飞', cityId: '3', work: 189, born: 165, command: 85, force: 95, intelligence: 60, politics: 50, morality: 80 },
+              { id: '5', name: '周瑜', cityId: '4', work: 189, born: 175, command: 92, force: 75, intelligence: 95, politics: 85, morality: 85 },
+              { id: '6', name: '陆逊', cityId: '4', work: 189, born: 183, command: 88, force: 70, intelligence: 90, politics: 80, morality: 85 },
+              { id: '7', name: '袁绍', cityId: '2', work: 189, born: 154, command: 75, force: 60, intelligence: 70, politics: 75, morality: 65 },
+              { id: '8', name: '袁术', cityId: '5', work: 189, born: 155, command: 60, force: 50, intelligence: 65, politics: 70, morality: 40 }
             ];
             generalsData = mockGenerals;
             setGenerals(mockGenerals);
@@ -368,15 +381,17 @@ const GameMapScreen = () => {
             console.log('First city item data:', jsonData[0] || {});
             
             const parsedCities: City[] = jsonData.map((item: any, index: number) => {
-              // 统计该城市的武将数量
-              const generalCount = generalsData.filter(general => general.cityId === item['id']).length;
+              // 统计该城市的武将数量，只统计work小于等于当前年份的武将
+              const currentYear = 189;
+              const cityId = item['id'] || (index + 1).toString();
+              const generalCount = generalsData.filter(general => general.cityId === cityId && general.work <= currentYear).length;
               
               return {
-                id: item['id'],
-                name: item['name'] || item['Name'] || item['NAME'] || '城市' || '未知',
-                position_x: parseFloat(item['position_x'] || item['positionX'] || item['PositionX'] || '0'),
-                position_y: parseFloat(item['position_y'] || item['positionY'] || item['PositionY'] || '0'),
-                ownerId: item['ownerId'] || item['owner_id'] || item['OwnerId'] || item['OWNERID'] || '0',
+                id: cityId,
+                name: item['name'] || item['Name'] || '城市' || '未知',
+                position_x: parseFloat(item['position_x'] || item['positionX'] || 'PositionX' || '0'),
+                position_y: parseFloat(item['position_y'] || item['positionY'] || 'PositionY' || '0'),
+                ownerId: item['ownerId'] || item['owner_id'] || '0',
                 color: '#999999', // 默认灰色
                 rule: parseFloat(item['统治值'] || item['rule'] || '0'),
                 population: parseFloat(item['人口'] || item['population'] || '0'),
@@ -626,6 +641,72 @@ const GameMapScreen = () => {
     console.log('退出游戏');
   };
 
+  // 游戏主逻辑
+
+  // 处理结束回合
+  const handleEndTurn = () => {
+    // 推进到下一个月份
+    setMonth(prevMonth => {
+      if (prevMonth === 12) {
+        setYear(prevYear => prevYear + 1);
+        return 1;
+      }
+      return prevMonth + 1;
+    });
+
+    // 处理AI行动
+    handleAIActions();
+
+    // 推进到下一个君主
+    setCurrentMonarchIndex(prevIndex => {
+      const nextIndex = (prevIndex + 1) % monarchs.length;
+      const nextMonarch = monarchs[nextIndex];
+      
+      // 显示行动消息
+      setActionMessage(`轮到 ${nextMonarch.name} 行动了`);
+      setShowActionMessage(true);
+      
+      // 3秒后隐藏消息
+      setTimeout(() => {
+        setShowActionMessage(false);
+      }, 3000);
+      
+      // 如果是玩家君主，切换到玩家行动阶段
+      if (nextMonarch.id === selectedMonarch?.id) {
+        setActionPhase('player');
+      } else {
+        setActionPhase('ai');
+        // AI自动行动
+        setTimeout(() => {
+          handleAIActions();
+        }, 1000);
+      }
+      
+      return nextIndex;
+    });
+  };
+
+  // 处理AI行动
+  const handleAIActions = () => {
+    // AI完善城池内政
+    const updatedCities = cities.map(city => {
+      // 只有AI君主的城池才会增长
+      const cityMonarch = monarchs.find(m => m.id === city.ownerId);
+      if (cityMonarch && cityMonarch.id !== selectedMonarch?.id) {
+        // 随机增长城池数值
+        return {
+          ...city,
+          agriculture: Math.min(100, city.agriculture + Math.floor(Math.random() * 5)),
+          commerce: Math.min(100, city.commerce + Math.floor(Math.random() * 5)),
+          waterControl: Math.min(100, city.waterControl + Math.floor(Math.random() * 5)),
+          rule: Math.min(100, city.rule + Math.floor(Math.random() * 3))
+        };
+      }
+      return city;
+    });
+    setCities(updatedCities);
+  };
+
   return (
     <View style={[styles.container, isDarkMode && styles.darkContainer]}>
       {/* 顶部信息栏 */}
@@ -654,6 +735,13 @@ const GameMapScreen = () => {
           </TouchableOpacity>
         </View>
       </View>
+      
+      {/* 行动消息显示 */}
+      {showActionMessage && (
+        <View style={[styles.actionMessageContainer, isDarkMode && styles.darkActionMessageContainer]}>
+          <Text style={[styles.actionMessageText, isDarkMode && styles.darkText]}>{actionMessage}</Text>
+        </View>
+      )}
       
       {/* 主内容区域 */}
       <View style={styles.mainContent}>
@@ -770,6 +858,14 @@ const GameMapScreen = () => {
               {showCityList ? '≡' : '≡'}
             </Text>
           </TouchableOpacity>
+          
+          {/* 结束回合按钮 */}
+          <TouchableOpacity
+            style={[styles.endTurnButton, isDarkMode && styles.darkEndTurnButton]}
+            onPress={handleEndTurn}
+          >
+            <Text style={[styles.endTurnButtonText, isDarkMode && styles.darkText]}>结束回合</Text>
+          </TouchableOpacity>
         </View>
       </View>
       
@@ -861,15 +957,21 @@ const GameMapScreen = () => {
               <Text style={[styles.cityStatLabel, isDarkMode && styles.darkText]}>粮:</Text>
               <Text style={[styles.cityStatValue, isDarkMode && styles.darkText]}>{selectedCity.grain}</Text>
             </View>
-            <View style={styles.cityStatRow}>
+            <TouchableOpacity 
+              style={styles.cityStatRow}
+              onPress={() => setShowGeneralList(true)}
+            >
               <Text style={[styles.cityStatLabel, isDarkMode && styles.darkText]}>武将数量:</Text>
-              <Text style={[styles.cityStatValue, isDarkMode && styles.darkText]}>{selectedCity.generalCount}</Text>
-            </View>
+              <View style={styles.generalCountContainer}>
+                <Text style={[styles.cityStatValue, isDarkMode && styles.darkText]}>{selectedCity.generalCount}</Text>
+                <Text style={[styles.generalIcon, isDarkMode && styles.darkText]}>👨‍✈️</Text>
+              </View>
+            </TouchableOpacity>
           </View>
           <View style={styles.cityActionButtons}>
             <TouchableOpacity
               style={[styles.cityActionButton, isDarkMode && styles.darkCityActionButton]}
-              onPress={() => console.log('内政')}
+              onPress={() => setShowInternalAffairs(true)}
             >
               <Text style={[styles.cityActionButtonText, isDarkMode && styles.darkText]}>内政</Text>
             </TouchableOpacity>
@@ -889,6 +991,96 @@ const GameMapScreen = () => {
         </View>
       )}
       
+      {/* 武将列表弹窗 */}
+      {showGeneralList && selectedCity && (
+        <View style={[styles.settingsModal, isDarkMode && styles.darkSettingsModal]}>
+          <TouchableOpacity 
+            style={styles.settingsModalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowGeneralList(false)}
+          />
+          <View style={[styles.generalListModalContent, isDarkMode && styles.darkSettingsModalContent]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.settingsModalTitle, isDarkMode && styles.darkText]}>{selectedCity.name} 武将列表</Text>
+              <TouchableOpacity
+                style={styles.closeButtonIcon}
+                onPress={() => setShowGeneralList(false)}
+              >
+                <Text style={[styles.closeButtonIconText, isDarkMode && styles.darkText]}>×</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.generalList}>
+              {generals
+                .filter(general => general.cityId === selectedCity.id && general.work <= year)
+                .map((general) => {
+                  const age = year - general.born;
+                  return (
+                    <View key={general.id} style={[styles.generalItem, isDarkMode && styles.darkGeneralItem]}>
+                      <Text style={[styles.generalName, isDarkMode && styles.darkText]}>{general.name}</Text>
+                      <View style={styles.generalStats}>
+                        <Text style={[styles.generalStat, isDarkMode && styles.darkText]}>统: {general.command}</Text>
+                        <Text style={[styles.generalStat, isDarkMode && styles.darkText]}>武: {general.force}</Text>
+                        <Text style={[styles.generalStat, isDarkMode && styles.darkText]}>智: {general.intelligence}</Text>
+                        <Text style={[styles.generalStat, isDarkMode && styles.darkText]}>政: {general.politics}</Text>
+                        <Text style={[styles.generalStat, isDarkMode && styles.darkText]}>德: {general.morality}</Text>
+                        <Text style={[styles.generalStat, isDarkMode && styles.darkText]}>年龄: {age}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+            </ScrollView>
+          </View>
+        </View>
+      )}
+
+      {/* 内政弹窗 */}
+      {showInternalAffairs && selectedCity && (
+        <View style={[styles.settingsModal, isDarkMode && styles.darkSettingsModal]}>
+          <TouchableOpacity 
+            style={styles.settingsModalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowInternalAffairs(false)}
+          />
+          <View style={[styles.internalAffairsModalContent, isDarkMode && styles.darkSettingsModalContent]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.settingsModalTitle, isDarkMode && styles.darkText]}>{selectedCity.name} 内政</Text>
+              <TouchableOpacity
+                style={styles.closeButtonIcon}
+                onPress={() => setShowInternalAffairs(false)}
+              >
+                <Text style={[styles.closeButtonIconText, isDarkMode && styles.darkText]}>×</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.internalAffairsButtons}>
+              <TouchableOpacity
+                style={[styles.internalAffairsButton, isDarkMode && styles.darkInternalAffairsButton]}
+                onPress={() => console.log('开垦')}
+              >
+                <Text style={[styles.internalAffairsButtonText, isDarkMode && styles.darkText]}>开垦</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.internalAffairsButton, isDarkMode && styles.darkInternalAffairsButton]}
+                onPress={() => console.log('劝商')}
+              >
+                <Text style={[styles.internalAffairsButtonText, isDarkMode && styles.darkText]}>劝商</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.internalAffairsButton, isDarkMode && styles.darkInternalAffairsButton]}
+                onPress={() => console.log('治水')}
+              >
+                <Text style={[styles.internalAffairsButtonText, isDarkMode && styles.darkText]}>治水</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.internalAffairsButton, isDarkMode && styles.darkInternalAffairsButton]}
+                onPress={() => console.log('巡查')}
+              >
+                <Text style={[styles.internalAffairsButtonText, isDarkMode && styles.darkText]}>巡查</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
       {/* 设置弹窗 */}
       {showSettings && (
         <View style={[styles.settingsModal, isDarkMode && styles.darkSettingsModal]}>
@@ -1466,6 +1658,148 @@ const styles = StyleSheet.create({
   },
   darkProgressBar: {
     backgroundColor: '#4CAF50',
+  },
+  generalCountContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  generalIcon: {
+    fontSize: 16,
+    marginLeft: 5,
+  },
+  generalListModalContent: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -150 }, { translateY: -200 }],
+    width: 300,
+    maxHeight: 400,
+    backgroundColor: '#ffffff',
+    padding: 20,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  internalAffairsModalContent: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -150 }, { translateY: -100 }],
+    width: 300,
+    backgroundColor: '#ffffff',
+    padding: 20,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  generalList: {
+    flex: 1,
+  },
+  generalItem: {
+    backgroundColor: '#f0f0e8',
+    padding: 15,
+    borderRadius: 4,
+    marginBottom: 10,
+  },
+  darkGeneralItem: {
+    backgroundColor: '#3a3a3a',
+  },
+  generalName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#2c2c2c',
+    marginBottom: 10,
+  },
+  generalStats: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  generalStat: {
+    fontSize: 14,
+    color: '#666666',
+  },
+  internalAffairsButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  internalAffairsButton: {
+    flex: 1,
+    backgroundColor: '#f0f0e8',
+    padding: 15,
+    borderRadius: 4,
+    alignItems: 'center',
+    minWidth: 120,
+  },
+  darkInternalAffairsButton: {
+    backgroundColor: '#3a3a3a',
+  },
+  internalAffairsButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#2c2c2c',
+  },
+  endTurnButton: {
+    position: 'absolute',
+    bottom: 80,
+    right: 20,
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  darkEndTurnButton: {
+    backgroundColor: '#45a049',
+  },
+  endTurnButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  actionMessageContainer: {
+    position: 'absolute',
+    top: 60,
+    right: 0,
+    left: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    padding: 10,
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  darkActionMessageContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+  },
+  actionMessageText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 
