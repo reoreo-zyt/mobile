@@ -1027,11 +1027,12 @@ const GameMapScreen = () => {
                 <Text style={[styles.closeButtonIconText, isDarkMode && styles.darkText]}>×</Text>
               </TouchableOpacity>
             </View>
-            <ScrollView style={styles.generalList} horizontal>
-              <View style={styles.generalTable}>
-                {/* 表头 */}
-                <View style={[styles.generalTableHeader, isDarkMode && styles.darkGeneralTableHeader]}>
-                  <TouchableOpacity style={styles.generalTableHeaderCell} onPress={() => handleGeneralSort('name')}>
+            <View style={styles.generalList}>
+              <View style={styles.generalTableContainer}>
+                {/* 固定列 */}
+                <View style={[styles.fixedColumn, isDarkMode && styles.darkFixedColumn]}>
+                  {/* 固定列表头 */}
+                  <TouchableOpacity style={[styles.generalTableHeaderCell, styles.fixedHeaderCell, isDarkMode && styles.darkFixedHeaderCell, isDarkMode && styles.darkGeneralTableHeader]} onPress={() => handleGeneralSort('name')}>
                     <View style={styles.generalTableHeaderCellContent}>
                       <Text style={[styles.generalTableHeaderText, isDarkMode && styles.darkText]}>姓名</Text>
                       {generalSortField === 'name' && (
@@ -1041,126 +1042,166 @@ const GameMapScreen = () => {
                       )}
                     </View>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.generalTableHeaderCell} onPress={() => handleGeneralSort('command')}>
-                    <View style={styles.generalTableHeaderCellContent}>
-                      <Text style={[styles.generalTableHeaderText, isDarkMode && styles.darkText]}>统率</Text>
-                      {generalSortField === 'command' && (
-                        <Text style={[styles.generalTableSortIcon, isDarkMode && styles.darkText]}>
-                          {generalSortOrder === 'desc' ? '▼' : '▲'}
-                        </Text>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.generalTableHeaderCell} onPress={() => handleGeneralSort('force')}>
-                    <View style={styles.generalTableHeaderCellContent}>
-                      <Text style={[styles.generalTableHeaderText, isDarkMode && styles.darkText]}>武力</Text>
-                      {generalSortField === 'force' && (
-                        <Text style={[styles.generalTableSortIcon, isDarkMode && styles.darkText]}>
-                          {generalSortOrder === 'desc' ? '▼' : '▲'}
-                        </Text>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.generalTableHeaderCell} onPress={() => handleGeneralSort('intelligence')}>
-                    <View style={styles.generalTableHeaderCellContent}>
-                      <Text style={[styles.generalTableHeaderText, isDarkMode && styles.darkText]}>智力</Text>
-                      {generalSortField === 'intelligence' && (
-                        <Text style={[styles.generalTableSortIcon, isDarkMode && styles.darkText]}>
-                          {generalSortOrder === 'desc' ? '▼' : '▲'}
-                        </Text>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.generalTableHeaderCell} onPress={() => handleGeneralSort('politics')}>
-                    <View style={styles.generalTableHeaderCellContent}>
-                      <Text style={[styles.generalTableHeaderText, isDarkMode && styles.darkText]}>政治</Text>
-                      {generalSortField === 'politics' && (
-                        <Text style={[styles.generalTableSortIcon, isDarkMode && styles.darkText]}>
-                          {generalSortOrder === 'desc' ? '▼' : '▲'}
-                        </Text>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.generalTableHeaderCell} onPress={() => handleGeneralSort('morality')}>
-                    <View style={styles.generalTableHeaderCellContent}>
-                      <Text style={[styles.generalTableHeaderText, isDarkMode && styles.darkText]}>德行</Text>
-                      {generalSortField === 'morality' && (
-                        <Text style={[styles.generalTableSortIcon, isDarkMode && styles.darkText]}>
-                          {generalSortOrder === 'desc' ? '▼' : '▲'}
-                        </Text>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.generalTableHeaderCell} onPress={() => handleGeneralSort('age')}>
-                    <View style={styles.generalTableHeaderCellContent}>
-                      <Text style={[styles.generalTableHeaderText, isDarkMode && styles.darkText]}>年龄</Text>
-                      {generalSortField === 'age' && (
-                        <Text style={[styles.generalTableSortIcon, isDarkMode && styles.darkText]}>
-                          {generalSortOrder === 'desc' ? '▼' : '▲'}
-                        </Text>
-                      )}
-                    </View>
-                  </TouchableOpacity>
+                  
+                  {/* 固定列内容 */}
+                  {(() => {
+                    let filteredGenerals = generals.filter(general => general.cityId === selectedCity.id && general.work <= year);
+                    
+                    // 排序
+                    if (generalSortField) {
+                      filteredGenerals = [...filteredGenerals].sort((a, b) => {
+                        let aValue: any, bValue: any;
+                        
+                        if (generalSortField === 'age') {
+                          aValue = year - a.born;
+                          bValue = year - b.born;
+                        } else {
+                          aValue = a[generalSortField as keyof typeof a];
+                          bValue = b[generalSortField as keyof typeof b];
+                        }
+                        
+                        if (aValue < bValue) {
+                          return generalSortOrder === 'asc' ? -1 : 1;
+                        }
+                        if (aValue > bValue) {
+                          return generalSortOrder === 'asc' ? 1 : -1;
+                        }
+                        return 0;
+                      });
+                    }
+                    
+                    return filteredGenerals.map((general) => (
+                      <View key={`${general.id}-fixed`} style={[styles.generalTableCell, styles.fixedCell, isDarkMode && styles.darkFixedCell, isDarkMode && styles.darkGeneralTableRow]}>
+                        <Text style={[styles.generalTableCellText, isDarkMode && styles.darkText]}>{general.name}</Text>
+                      </View>
+                    ));
+                  })()}
                 </View>
                 
-                {/* 表内容 */}
-                {(() => {
-                  let filteredGenerals = generals.filter(general => general.cityId === selectedCity.id && general.work <= year);
-                  
-                  // 排序
-                  if (generalSortField) {
-                    filteredGenerals = [...filteredGenerals].sort((a, b) => {
-                      let aValue: any, bValue: any;
+                {/* 可滚动列 */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={true} style={styles.scrollableColumns}>
+                  <View style={styles.scrollableContent}>
+                    {/* 可滚动列表头 */}
+                    <View style={[styles.generalTableHeader, isDarkMode && styles.darkGeneralTableHeader]}>
+                      <TouchableOpacity style={styles.generalTableHeaderCell} onPress={() => handleGeneralSort('command')}>
+                        <View style={styles.generalTableHeaderCellContent}>
+                          <Text style={[styles.generalTableHeaderText, isDarkMode && styles.darkText]}>统率</Text>
+                          {generalSortField === 'command' && (
+                            <Text style={[styles.generalTableSortIcon, isDarkMode && styles.darkText]}>
+                              {generalSortOrder === 'desc' ? '▼' : '▲'}
+                            </Text>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.generalTableHeaderCell} onPress={() => handleGeneralSort('force')}>
+                        <View style={styles.generalTableHeaderCellContent}>
+                          <Text style={[styles.generalTableHeaderText, isDarkMode && styles.darkText]}>武力</Text>
+                          {generalSortField === 'force' && (
+                            <Text style={[styles.generalTableSortIcon, isDarkMode && styles.darkText]}>
+                              {generalSortOrder === 'desc' ? '▼' : '▲'}
+                            </Text>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.generalTableHeaderCell} onPress={() => handleGeneralSort('intelligence')}>
+                        <View style={styles.generalTableHeaderCellContent}>
+                          <Text style={[styles.generalTableHeaderText, isDarkMode && styles.darkText]}>智力</Text>
+                          {generalSortField === 'intelligence' && (
+                            <Text style={[styles.generalTableSortIcon, isDarkMode && styles.darkText]}>
+                              {generalSortOrder === 'desc' ? '▼' : '▲'}
+                            </Text>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.generalTableHeaderCell} onPress={() => handleGeneralSort('politics')}>
+                        <View style={styles.generalTableHeaderCellContent}>
+                          <Text style={[styles.generalTableHeaderText, isDarkMode && styles.darkText]}>政治</Text>
+                          {generalSortField === 'politics' && (
+                            <Text style={[styles.generalTableSortIcon, isDarkMode && styles.darkText]}>
+                              {generalSortOrder === 'desc' ? '▼' : '▲'}
+                            </Text>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.generalTableHeaderCell} onPress={() => handleGeneralSort('morality')}>
+                        <View style={styles.generalTableHeaderCellContent}>
+                          <Text style={[styles.generalTableHeaderText, isDarkMode && styles.darkText]}>德行</Text>
+                          {generalSortField === 'morality' && (
+                            <Text style={[styles.generalTableSortIcon, isDarkMode && styles.darkText]}>
+                              {generalSortOrder === 'desc' ? '▼' : '▲'}
+                            </Text>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.generalTableHeaderCell} onPress={() => handleGeneralSort('age')}>
+                        <View style={styles.generalTableHeaderCellContent}>
+                          <Text style={[styles.generalTableHeaderText, isDarkMode && styles.darkText]}>年龄</Text>
+                          {generalSortField === 'age' && (
+                            <Text style={[styles.generalTableSortIcon, isDarkMode && styles.darkText]}>
+                              {generalSortOrder === 'desc' ? '▼' : '▲'}
+                            </Text>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    </View>
+                    
+                    {/* 可滚动列内容 */}
+                    {(() => {
+                      let filteredGenerals = generals.filter(general => general.cityId === selectedCity.id && general.work <= year);
                       
-                      if (generalSortField === 'age') {
-                        aValue = year - a.born;
-                        bValue = year - b.born;
-                      } else {
-                        aValue = a[generalSortField as keyof typeof a];
-                        bValue = b[generalSortField as keyof typeof b];
+                      // 排序
+                      if (generalSortField) {
+                        filteredGenerals = [...filteredGenerals].sort((a, b) => {
+                          let aValue: any, bValue: any;
+                          
+                          if (generalSortField === 'age') {
+                            aValue = year - a.born;
+                            bValue = year - b.born;
+                          } else {
+                            aValue = a[generalSortField as keyof typeof a];
+                            bValue = b[generalSortField as keyof typeof b];
+                          }
+                          
+                          if (aValue < bValue) {
+                            return generalSortOrder === 'asc' ? -1 : 1;
+                          }
+                          if (aValue > bValue) {
+                            return generalSortOrder === 'asc' ? 1 : -1;
+                          }
+                          return 0;
+                        });
                       }
                       
-                      if (aValue < bValue) {
-                        return generalSortOrder === 'asc' ? -1 : 1;
-                      }
-                      if (aValue > bValue) {
-                        return generalSortOrder === 'asc' ? 1 : -1;
-                      }
-                      return 0;
-                    });
-                  }
-                  
-                  return filteredGenerals.map((general) => {
-                    const age = year - general.born;
-                    return (
-                      <View key={general.id} style={[styles.generalTableRow, isDarkMode && styles.darkGeneralTableRow]}>
-                        <View style={styles.generalTableCell}>
-                          <Text style={[styles.generalTableCellText, isDarkMode && styles.darkText]}>{general.name}</Text>
-                        </View>
-                        <View style={styles.generalTableCell}>
-                          <Text style={[styles.generalTableCellText, isDarkMode && styles.darkText]}>{general.command}</Text>
-                        </View>
-                        <View style={styles.generalTableCell}>
-                          <Text style={[styles.generalTableCellText, isDarkMode && styles.darkText]}>{general.force}</Text>
-                        </View>
-                        <View style={styles.generalTableCell}>
-                          <Text style={[styles.generalTableCellText, isDarkMode && styles.darkText]}>{general.intelligence}</Text>
-                        </View>
-                        <View style={styles.generalTableCell}>
-                          <Text style={[styles.generalTableCellText, isDarkMode && styles.darkText]}>{general.politics}</Text>
-                        </View>
-                        <View style={styles.generalTableCell}>
-                          <Text style={[styles.generalTableCellText, isDarkMode && styles.darkText]}>{general.morality}</Text>
-                        </View>
-                        <View style={styles.generalTableCell}>
-                          <Text style={[styles.generalTableCellText, isDarkMode && styles.darkText]}>{age}</Text>
-                        </View>
-                      </View>
-                    );
-                  });
-                })()}
+                      return filteredGenerals.map((general) => {
+                        const age = year - general.born;
+                        return (
+                          <View key={general.id} style={[styles.generalTableRow, isDarkMode && styles.darkGeneralTableRow]}>
+                            <View style={styles.generalTableCell}>
+                              <Text style={[styles.generalTableCellText, isDarkMode && styles.darkText]}>{general.command}</Text>
+                            </View>
+                            <View style={styles.generalTableCell}>
+                              <Text style={[styles.generalTableCellText, isDarkMode && styles.darkText]}>{general.force}</Text>
+                            </View>
+                            <View style={styles.generalTableCell}>
+                              <Text style={[styles.generalTableCellText, isDarkMode && styles.darkText]}>{general.intelligence}</Text>
+                            </View>
+                            <View style={styles.generalTableCell}>
+                              <Text style={[styles.generalTableCellText, isDarkMode && styles.darkText]}>{general.politics}</Text>
+                            </View>
+                            <View style={styles.generalTableCell}>
+                              <Text style={[styles.generalTableCellText, isDarkMode && styles.darkText]}>{general.morality}</Text>
+                            </View>
+                            <View style={styles.generalTableCell}>
+                              <Text style={[styles.generalTableCellText, isDarkMode && styles.darkText]}>{age}</Text>
+                            </View>
+                          </View>
+                        );
+                      });
+                    })()}
+                  </View>
+                </ScrollView>
               </View>
-            </ScrollView>
+            </View>
           </View>
         </View>
       )}
@@ -1721,12 +1762,12 @@ const styles = StyleSheet.create({
   },
   darkSettingsModalContent: {
     position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: [{ translateX: -100 }, { translateY: -100 }],
-    width: 200,
+    top: '5%',
+    left: '2%',
+    right: '2%',
+    maxHeight: '90%',
     backgroundColor: '#2a2a2a',
-    padding: 20,
+    padding: 15,
     borderRadius: 8,
   },
   settingsModalTitle: {
@@ -1801,13 +1842,12 @@ const styles = StyleSheet.create({
   },
   generalListModalContent: {
     position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: [{ translateX: -150 }, { translateY: -200 }],
-    width: 300,
-    maxHeight: 400,
+    top: '5%',
+    left: '2%',
+    right: '2%',
+    maxHeight: '90%',
     backgroundColor: '#ffffff',
-    padding: 20,
+    padding: 15,
     borderRadius: 8,
     shadowColor: '#000',
     shadowOffset: {
@@ -1844,12 +1884,46 @@ const styles = StyleSheet.create({
   },
   generalList: {
     flex: 1,
+    marginBottom: 10,
   },
-  generalTable: {
+  generalTableContainer: {
+    flexDirection: 'row',
     borderWidth: 1,
     borderColor: '#d4d4d0', // 浅灰色
     borderRadius: 8,
     overflow: 'hidden',
+  },
+  fixedColumn: {
+    backgroundColor: '#f0f0e8', // 浅米色
+    borderRightWidth: 1,
+    borderRightColor: '#d4d4d0', // 浅灰色
+  },
+  fixedHeaderCell: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#d4d4d0', // 浅灰色
+  },
+  fixedCell: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#d4d4d0', // 浅灰色
+  },
+  darkFixedColumn: {
+    backgroundColor: '#3a3a3a', // 灰色
+    borderRightWidth: 1,
+    borderRightColor: '#4a4a4a', // 深灰色
+  },
+  darkFixedHeaderCell: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#4a4a4a', // 深灰色
+  },
+  darkFixedCell: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#4a4a4a', // 深灰色
+  },
+  scrollableColumns: {
+    flex: 1,
+  },
+  scrollableContent: {
+    flex: 1,
   },
   generalTableHeader: {
     flexDirection: 'row',
@@ -1864,8 +1938,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#4a4a4a', // 深灰色
   },
   generalTableHeaderCell: {
-    padding: 10,
-    minWidth: 80,
+    padding: 8,
+    minWidth: 70,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1892,13 +1966,13 @@ const styles = StyleSheet.create({
     borderBottomColor: '#3a3a3a', // 深灰色
   },
   generalTableCell: {
-    padding: 10,
-    minWidth: 80,
+    padding: 8,
+    minWidth: 70,
     alignItems: 'center',
     justifyContent: 'center',
   },
   generalTableCellText: {
-    fontSize: 14,
+    fontSize: 13,
   },
   internalAffairsButtons: {
     flexDirection: 'row',
