@@ -19,6 +19,15 @@ interface City {
   position_y: number;
   ownerId: string;
   color: string;
+  rule: number; // 统治值
+  population: number; // 人口
+  soldiers: number; // 兵力
+  agriculture: number; // 农业
+  commerce: number; // 商业
+  waterControl: number; // 治水
+  gold: number; // 金
+  grain: number; // 粮
+  generalCount: number; // 武将数量
 }
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -29,6 +38,7 @@ const GameMapScreen = () => {
   const colorScheme = useColorScheme();
   
   const [selectedMonarch, setSelectedMonarch] = useState<Monarch | null>(null);
+  const [monarchs, setMonarchs] = useState<Monarch[]>([]);
   const [cities, setCities] = useState<City[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDarkMode, setIsDarkMode] = useState(colorScheme === 'dark');
@@ -173,6 +183,7 @@ const GameMapScreen = () => {
         console.error('Failed to parse monarch data:', error);
       }
     }
+    loadMonarchs();
     loadCities();
   }, [params.monarch]);
   
@@ -216,6 +227,178 @@ const GameMapScreen = () => {
     }
   }, [selectedMonarch, cities, scale, pan]);
   
+  const loadMonarchs = async () => {
+    try {
+      console.log('Loading monarch data from Excel file...');
+      
+      // 尝试使用不同的路径加载 Excel 文件
+      const possiblePaths = [
+        '311_data.xlsx',
+        './311_data.xlsx',
+        './public/311_data.xlsx',
+        '/311_data.xlsx',
+        '/public/311_data.xlsx',
+        'https://localhost:8081/311_data.xlsx',
+        'https://localhost:8081/public/311_data.xlsx',
+        'https://localhost:8082/311_data.xlsx',
+        'https://localhost:8082/public/311_data.xlsx'
+      ];
+      
+      let data: ArrayBuffer | null = null;
+      
+      for (const path of possiblePaths) {
+        try {
+          console.log(`Trying to fetch Excel file from: ${path}`);
+          const response = await fetch(path);
+          
+          if (!response.ok) {
+            console.log(`Fetch failed with status: ${response.status}`);
+            continue;
+          }
+          
+          data = await response.arrayBuffer();
+          console.log(`Excel file fetched successfully from: ${path}`);
+          break;
+        } catch (fetchError) {
+          console.log(`Error fetching from ${path}:`, fetchError);
+          continue;
+        }
+      }
+      
+      if (data && data instanceof ArrayBuffer) {
+        // 解析 Excel 文件
+        console.log('Parsing Excel file...');
+        try {
+          const workbook = XLSX.read(data, { type: 'array' });
+          
+          // 检查是否存在君主表
+          if (!workbook.Sheets['君主表']) {
+            throw new Error('君主表 not found in Excel file');
+          }
+          
+          const worksheet = workbook.Sheets['君主表'];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+          
+          console.log(`Found ${jsonData.length} monarchs in Excel file`);
+          
+          // 转换数据格式
+          console.log('Excel data keys:', Object.keys(jsonData[0] || {}));
+          console.log('First item data:', jsonData[0] || {});
+          
+          const parsedMonarchs: Monarch[] = jsonData.map((item: any, index: number) => {
+            // 计算城池数量
+            let cityCount = 0;
+            if (item['citys'] || item['cities'] || item['城市']) {
+              const cityField = item['citys'] || item['cities'] || item['城市'];
+              cityCount = cityField.split(',').length;
+            }
+            
+            // 尝试获取颜色字段，支持不同的字段名
+            let color = '#999999';
+            
+            // 支持多种可能的颜色字段名称
+            const colorFields = ['color', 'Color', 'COLOR', '颜色', 'colour', 'Colour', 'COLOUR'];
+            let foundColor = false;
+            
+            for (const field of colorFields) {
+              if (item[field]) {
+                color = item[field];
+                foundColor = true;
+                console.log(`Monarch ${item['name'] || '未知'} color from ${field}: ${color}`);
+                break;
+              }
+            }
+            
+            if (!foundColor) {
+              console.log(`Monarch ${item['name'] || '未知'} has no color field`);
+            }
+            
+            // 确保颜色值是有效的十六进制格式
+            if (typeof color === 'string') {
+              // 如果是颜色名称，转换为十六进制
+              const colorNameMap: { [key: string]: string } = {
+                'red': '#ff0000',
+                'green': '#00ff00',
+                'blue': '#0000ff',
+                'yellow': '#ffff00',
+                'purple': '#800080',
+                'orange': '#ffa500',
+                'pink': '#ffc0cb',
+                'brown': '#a52a2a',
+                'gray': '#808080',
+                'grey': '#808080',
+                'black': '#000000',
+                'white': '#ffffff'
+              };
+              
+              // 转换颜色名称
+              const lowerColor = color.toLowerCase();
+              if (colorNameMap[lowerColor]) {
+                color = colorNameMap[lowerColor];
+                console.log(`Converted color name ${color} to hex: ${color}`);
+              }
+              
+              // 确保是有效的十六进制颜色
+              if (!color.match(/^#[0-9A-Fa-f]{6}$/)) {
+                console.log(`Invalid color format: ${color}, using default gray`);
+                color = '#999999';
+              }
+            }
+            
+            return {
+              id: item['id'],
+              name: item['name'] || item['Name'] || item['NAME'] || item['君主'] || '未知',
+              cityColor: color,
+              cityCount: cityCount
+            };
+          });
+          
+          console.log('Monarch data processed successfully');
+          setMonarchs(parsedMonarchs);
+        } catch (parseError) {
+          console.error('Error parsing Excel file:', parseError);
+          // 使用模拟数据
+          console.log('Using mock monarch data due to parsing error...');
+          const mockMonarchs: Monarch[] = [
+            { id: '1', name: '曹操', cityColor: '#ff0000', cityCount: 5 },
+            { id: '2', name: '刘备', cityColor: '#00ff00', cityCount: 3 },
+            { id: '3', name: '孙权', cityColor: '#0000ff', cityCount: 4 },
+            { id: '4', name: '袁绍', cityColor: '#ffff00', cityCount: 6 },
+            { id: '5', name: '袁术', cityColor: '#ff00ff', cityCount: 2 }
+          ];
+          
+          setMonarchs(mockMonarchs);
+        }
+      } else {
+        // 备用方案：使用模拟数据
+        console.log('Using mock data as fallback...');
+        const mockMonarchs: Monarch[] = [
+          { id: '1', name: '曹操', cityColor: '#ff0000', cityCount: 5 },
+          { id: '2', name: '刘备', cityColor: '#00ff00', cityCount: 3 },
+          { id: '3', name: '孙权', cityColor: '#0000ff', cityCount: 4 },
+          { id: '4', name: '袁绍', cityColor: '#ffff00', cityCount: 6 },
+          { id: '5', name: '袁术', cityColor: '#ff00ff', cityCount: 2 }
+        ];
+        
+        console.log('Using mock monarch data');
+        setMonarchs(mockMonarchs);
+      }
+    } catch (error) {
+      console.error('Error loading monarchs:', error);
+      // 提供详细的错误信息，但不抛出异常，使用模拟数据
+      console.log('Using mock data due to error...');
+      const mockMonarchs: Monarch[] = [
+        { id: '1', name: '曹操', cityColor: '#ff0000', cityCount: 5 },
+        { id: '2', name: '刘备', cityColor: '#00ff00', cityCount: 3 },
+        { id: '3', name: '孙权', cityColor: '#0000ff', cityCount: 4 },
+        { id: '4', name: '袁绍', cityColor: '#ffff00', cityCount: 6 },
+        { id: '5', name: '袁术', cityColor: '#ff00ff', cityCount: 2 }
+      ];
+      
+      setMonarchs(mockMonarchs);
+    }
+  };
+
   const loadCities = async () => {
     try {
       console.log('Loading city data from Excel file...');
@@ -281,7 +464,16 @@ const GameMapScreen = () => {
               position_x: parseFloat(item['position_x'] || item['positionX'] || item['PositionX'] || '0'),
               position_y: parseFloat(item['position_y'] || item['positionY'] || item['PositionY'] || '0'),
               ownerId: item['ownerId'] || item['owner_id'] || item['OwnerId'] || item['OWNERID'] || '0',
-              color: '#999999' // 默认灰色
+              color: '#999999', // 默认灰色
+              rule: parseFloat(item['统治值'] || item['rule'] || '0'),
+              population: parseFloat(item['人口'] || item['population'] || '0'),
+              soldiers: parseFloat(item['兵力'] || item['soldiers'] || '0'),
+              agriculture: parseFloat(item['农业'] || item['agriculture'] || '0'),
+              commerce: parseFloat(item['商业'] || item['commerce'] || '0'),
+              waterControl: parseFloat(item['治水'] || item['waterControl'] || '0'),
+              gold: parseFloat(item['金'] || item['gold'] || '0'),
+              grain: parseFloat(item['粮'] || item['grain'] || '0'),
+              generalCount: 0 // 暂时默认为0，后续从武将表中统计
             };
           });
           
@@ -293,11 +485,11 @@ const GameMapScreen = () => {
           // 使用模拟数据
           console.log('Using mock city data due to parsing error...');
           const mockCities: City[] = [
-            { id: '1', name: '洛阳', position_x: 100, position_y: 100, ownerId: '1', color: '#ff0000' },
-            { id: '2', name: '长安', position_x: 200, position_y: 150, ownerId: '1', color: '#ff0000' },
-            { id: '3', name: '成都', position_x: 300, position_y: 200, ownerId: '2', color: '#00ff00' },
-            { id: '4', name: '建业', position_x: 400, position_y: 100, ownerId: '3', color: '#0000ff' },
-            { id: '5', name: '襄阳', position_x: 250, position_y: 120, ownerId: '0', color: '#999999' }
+            { id: '1', name: '洛阳', position_x: 100, position_y: 100, ownerId: '1', color: '#ff0000', rule: 90, population: 100000, soldiers: 50000, agriculture: 80, commerce: 90, waterControl: 70, gold: 50000, grain: 100000, generalCount: 5 },
+            { id: '2', name: '长安', position_x: 200, position_y: 150, ownerId: '1', color: '#ff0000', rule: 85, population: 90000, soldiers: 45000, agriculture: 75, commerce: 85, waterControl: 65, gold: 45000, grain: 90000, generalCount: 4 },
+            { id: '3', name: '成都', position_x: 300, position_y: 200, ownerId: '2', color: '#00ff00', rule: 80, population: 80000, soldiers: 40000, agriculture: 90, commerce: 70, waterControl: 85, gold: 40000, grain: 120000, generalCount: 3 },
+            { id: '4', name: '建业', position_x: 400, position_y: 100, ownerId: '3', color: '#0000ff', rule: 88, population: 95000, soldiers: 48000, agriculture: 70, commerce: 95, waterControl: 80, gold: 55000, grain: 85000, generalCount: 4 },
+            { id: '5', name: '襄阳', position_x: 250, position_y: 120, ownerId: '0', color: '#999999', rule: 70, population: 60000, soldiers: 30000, agriculture: 65, commerce: 60, waterControl: 75, gold: 30000, grain: 70000, generalCount: 2 }
           ];
           
           setCities(mockCities);
@@ -307,11 +499,11 @@ const GameMapScreen = () => {
         // 备用方案：使用模拟数据
         console.log('Using mock city data as fallback...');
         const mockCities: City[] = [
-          { id: '1', name: '洛阳', position_x: 100, position_y: 100, ownerId: '1', color: '#ff0000' },
-          { id: '2', name: '长安', position_x: 200, position_y: 150, ownerId: '1', color: '#ff0000' },
-          { id: '3', name: '成都', position_x: 300, position_y: 200, ownerId: '2', color: '#00ff00' },
-          { id: '4', name: '建业', position_x: 400, position_y: 100, ownerId: '3', color: '#0000ff' },
-          { id: '5', name: '襄阳', position_x: 250, position_y: 120, ownerId: '0', color: '#999999' }
+          { id: '1', name: '洛阳', position_x: 100, position_y: 100, ownerId: '1', color: '#ff0000', rule: 90, population: 100000, soldiers: 50000, agriculture: 80, commerce: 90, waterControl: 70, gold: 50000, grain: 100000, generalCount: 5 },
+          { id: '2', name: '长安', position_x: 200, position_y: 150, ownerId: '1', color: '#ff0000', rule: 85, population: 90000, soldiers: 45000, agriculture: 75, commerce: 85, waterControl: 65, gold: 45000, grain: 90000, generalCount: 4 },
+          { id: '3', name: '成都', position_x: 300, position_y: 200, ownerId: '2', color: '#00ff00', rule: 80, population: 80000, soldiers: 40000, agriculture: 90, commerce: 70, waterControl: 85, gold: 40000, grain: 120000, generalCount: 3 },
+          { id: '4', name: '建业', position_x: 400, position_y: 100, ownerId: '3', color: '#0000ff', rule: 88, population: 95000, soldiers: 48000, agriculture: 70, commerce: 95, waterControl: 80, gold: 55000, grain: 85000, generalCount: 4 },
+          { id: '5', name: '襄阳', position_x: 250, position_y: 120, ownerId: '0', color: '#999999', rule: 70, population: 60000, soldiers: 30000, agriculture: 65, commerce: 60, waterControl: 75, gold: 30000, grain: 70000, generalCount: 2 }
         ];
         
         console.log('Using mock city data');
@@ -323,11 +515,11 @@ const GameMapScreen = () => {
       // 提供详细的错误信息，但不抛出异常，使用模拟数据
       console.log('Using mock city data due to error...');
       const mockCities: City[] = [
-        { id: '1', name: '洛阳', position_x: 100, position_y: 100, ownerId: '1', color: '#ff0000' },
-        { id: '2', name: '长安', position_x: 200, position_y: 150, ownerId: '1', color: '#ff0000' },
-        { id: '3', name: '成都', position_x: 300, position_y: 200, ownerId: '2', color: '#00ff00' },
-        { id: '4', name: '建业', position_x: 400, position_y: 100, ownerId: '3', color: '#0000ff' },
-        { id: '5', name: '襄阳', position_x: 250, position_y: 120, ownerId: '0', color: '#999999' }
+        { id: '1', name: '洛阳', position_x: 100, position_y: 100, ownerId: '1', color: '#ff0000', rule: 90, population: 100000, soldiers: 50000, agriculture: 80, commerce: 90, waterControl: 70, gold: 50000, grain: 100000, generalCount: 5 },
+        { id: '2', name: '长安', position_x: 200, position_y: 150, ownerId: '1', color: '#ff0000', rule: 85, population: 90000, soldiers: 45000, agriculture: 75, commerce: 85, waterControl: 65, gold: 45000, grain: 90000, generalCount: 4 },
+        { id: '3', name: '成都', position_x: 300, position_y: 200, ownerId: '2', color: '#00ff00', rule: 80, population: 80000, soldiers: 40000, agriculture: 90, commerce: 70, waterControl: 85, gold: 40000, grain: 120000, generalCount: 3 },
+        { id: '4', name: '建业', position_x: 400, position_y: 100, ownerId: '3', color: '#0000ff', rule: 88, population: 95000, soldiers: 48000, agriculture: 70, commerce: 95, waterControl: 80, gold: 55000, grain: 85000, generalCount: 4 },
+        { id: '5', name: '襄阳', position_x: 250, position_y: 120, ownerId: '0', color: '#999999', rule: 70, population: 60000, soldiers: 30000, agriculture: 65, commerce: 60, waterControl: 75, gold: 30000, grain: 70000, generalCount: 2 }
       ];
       
       setCities(mockCities);
@@ -423,9 +615,20 @@ const GameMapScreen = () => {
                 let cityColor = city.color;
                 if (city.ownerId === '0') {
                   cityColor = '#999999';
-                } else if (selectedMonarch && city.ownerId === selectedMonarch.id) {
-                  cityColor = selectedMonarch.cityColor;
+                } else {
+                  // 查找对应的君主，设置其颜色
+                  const monarch = monarchs.find(m => m.id === city.ownerId);
+                  if (monarch) {
+                    cityColor = monarch.cityColor;
+                  }
                 }
+                
+                // 只有点击选择君主的城池时才弹出信息
+                const handleCityPress = () => {
+                  if (selectedMonarch && city.ownerId === selectedMonarch.id) {
+                    setSelectedCity(city);
+                  }
+                };
                 
                 return (
                   <TouchableOpacity
@@ -437,7 +640,7 @@ const GameMapScreen = () => {
                         top: y,
                       }
                     ]}
-                    onPress={() => setSelectedCity(city)}
+                    onPress={handleCityPress}
                   >
                     <View 
                       style={[
@@ -545,7 +748,7 @@ const GameMapScreen = () => {
       
       {/* 城池信息弹窗 */}
       {selectedCity && (
-        <View style={[styles.cityModal, isDarkMode && styles.darkCityModal]}>
+        <View style={[styles.cityModal, isDarkMode && styles.darkCityModal, styles.largeCityModal]}>
           <Text style={[styles.cityModalTitle, isDarkMode && styles.darkText]}>{selectedCity.name}</Text>
           <Text style={[styles.cityModalInfo, isDarkMode && styles.darkText]}>
             位置: ({selectedCity.position_x}, {selectedCity.position_y})
@@ -553,6 +756,64 @@ const GameMapScreen = () => {
           <Text style={[styles.cityModalInfo, isDarkMode && styles.darkText]}>
             所有者: {selectedCity.ownerId === '0' ? '无' : `ID: ${selectedCity.ownerId}`}
           </Text>
+          <View style={styles.cityStatsContainer}>
+            <View style={styles.cityStatRow}>
+              <Text style={[styles.cityStatLabel, isDarkMode && styles.darkText]}>统治值:</Text>
+              <Text style={[styles.cityStatValue, isDarkMode && styles.darkText]}>{selectedCity.rule}</Text>
+            </View>
+            <View style={styles.cityStatRow}>
+              <Text style={[styles.cityStatLabel, isDarkMode && styles.darkText]}>人口:</Text>
+              <Text style={[styles.cityStatValue, isDarkMode && styles.darkText]}>{selectedCity.population}</Text>
+            </View>
+            <View style={styles.cityStatRow}>
+              <Text style={[styles.cityStatLabel, isDarkMode && styles.darkText]}>兵力:</Text>
+              <Text style={[styles.cityStatValue, isDarkMode && styles.darkText]}>{selectedCity.soldiers}</Text>
+            </View>
+            <View style={styles.cityStatRow}>
+              <Text style={[styles.cityStatLabel, isDarkMode && styles.darkText]}>农业:</Text>
+              <Text style={[styles.cityStatValue, isDarkMode && styles.darkText]}>{selectedCity.agriculture}</Text>
+            </View>
+            <View style={styles.cityStatRow}>
+              <Text style={[styles.cityStatLabel, isDarkMode && styles.darkText]}>商业:</Text>
+              <Text style={[styles.cityStatValue, isDarkMode && styles.darkText]}>{selectedCity.commerce}</Text>
+            </View>
+            <View style={styles.cityStatRow}>
+              <Text style={[styles.cityStatLabel, isDarkMode && styles.darkText]}>治水:</Text>
+              <Text style={[styles.cityStatValue, isDarkMode && styles.darkText]}>{selectedCity.waterControl}</Text>
+            </View>
+            <View style={styles.cityStatRow}>
+              <Text style={[styles.cityStatLabel, isDarkMode && styles.darkText]}>金:</Text>
+              <Text style={[styles.cityStatValue, isDarkMode && styles.darkText]}>{selectedCity.gold}</Text>
+            </View>
+            <View style={styles.cityStatRow}>
+              <Text style={[styles.cityStatLabel, isDarkMode && styles.darkText]}>粮:</Text>
+              <Text style={[styles.cityStatValue, isDarkMode && styles.darkText]}>{selectedCity.grain}</Text>
+            </View>
+            <View style={styles.cityStatRow}>
+              <Text style={[styles.cityStatLabel, isDarkMode && styles.darkText]}>武将数量:</Text>
+              <Text style={[styles.cityStatValue, isDarkMode && styles.darkText]}>{selectedCity.generalCount}</Text>
+            </View>
+          </View>
+          <View style={styles.cityActionButtons}>
+            <TouchableOpacity
+              style={[styles.cityActionButton, isDarkMode && styles.darkCityActionButton]}
+              onPress={() => console.log('内政')}
+            >
+              <Text style={[styles.cityActionButtonText, isDarkMode && styles.darkText]}>内政</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.cityActionButton, isDarkMode && styles.darkCityActionButton]}
+              onPress={() => console.log('外交')}
+            >
+              <Text style={[styles.cityActionButtonText, isDarkMode && styles.darkText]}>外交</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.cityActionButton, isDarkMode && styles.darkCityActionButton]}
+              onPress={() => console.log('战争')}
+            >
+              <Text style={[styles.cityActionButtonText, isDarkMode && styles.darkText]}>战争</Text>
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
             style={[styles.closeButton, isDarkMode && styles.darkCloseButton]}
             onPress={() => setSelectedCity(null)}
@@ -885,8 +1146,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: '50%',
     left: '50%',
-    transform: [{ translateX: -100 }, { translateY: -100 }],
-    width: 200,
+    transform: [{ translateX: -150 }, { translateY: -200 }],
+    width: 300,
     backgroundColor: '#ffffff', // 白色
     padding: 20,
     borderRadius: 8,
@@ -904,11 +1165,55 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: '50%',
     left: '50%',
-    transform: [{ translateX: -100 }, { translateY: -100 }],
-    width: 200,
+    transform: [{ translateX: -150 }, { translateY: -200 }],
+    width: 300,
     backgroundColor: '#2a2a2a', // 深灰色
     padding: 20,
     borderRadius: 8,
+  },
+  cityStatsContainer: {
+    marginTop: 10,
+    marginBottom: 15,
+  },
+  cityStatRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 5,
+  },
+  cityStatLabel: {
+    fontSize: 14,
+    color: '#666666',
+  },
+  cityStatValue: {
+    fontSize: 14,
+    color: '#2c2c2c',
+    fontWeight: 'bold',
+  },
+  cityActionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 15,
+  },
+  cityActionButton: {
+    flex: 1,
+    backgroundColor: '#f0f0e8',
+    padding: 10,
+    borderRadius: 4,
+    alignItems: 'center',
+    marginHorizontal: 5,
+  },
+  darkCityActionButton: {
+    flex: 1,
+    backgroundColor: '#3a3a3a',
+    padding: 10,
+    borderRadius: 4,
+    alignItems: 'center',
+    marginHorizontal: 5,
+  },
+  cityActionButtonText: {
+    color: '#2c2c2c',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   cityModalTitle: {
     fontSize: 18,
