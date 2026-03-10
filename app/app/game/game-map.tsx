@@ -36,6 +36,9 @@ const GameMapScreen = () => {
   const [year, setYear] = useState(189);
   const [month, setMonth] = useState(1);
   const [mapReady, setMapReady] = useState(false);
+  const [scale, setScale] = useState(1);
+  const [showCityList, setShowCityList] = useState(true);
+  const scrollViewRef = useRef<ScrollView>(null);
   
   // 计算政令数量
   const calculateDecreeCount = () => {
@@ -43,6 +46,84 @@ const GameMapScreen = () => {
     const baseDecrees = 3;
     const extraCities = Math.max(0, selectedMonarch.cityCount - 3);
     return Math.min(baseDecrees + extraCities, 5);
+  };
+  
+  // 处理地图缩放
+  const handleZoom = (factor: number) => {
+    const newScale = Math.max(0.5, Math.min(3, scale * factor));
+    setScale(newScale);
+  };
+  
+  // 处理点击城池列表项
+  const handleCityListItemPress = (city: City) => {
+    setSelectedCity(city);
+    // 计算滚动位置以定位到选中的城池
+    const mapCenterX = screenWidth / 2;
+    const mapCenterY = screenHeight / 2;
+    const cityX = city.position_x;
+    const cityY = city.position_y;
+    
+    // 计算需要滚动的位置
+    const newScrollX = cityX - mapCenterX / scale;
+    const newScrollY = cityY - mapCenterY / scale;
+    
+    if (scrollViewRef.current) {
+      scrollViewRef.current.scrollTo({ x: newScrollX, y: newScrollY, animated: true });
+    }
+  };
+  
+  // 调整视图以显示所有城池
+  const adjustViewToShowAllCities = () => {
+    if (cities.length === 0) return;
+    
+    // 计算所有城池的边界
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    
+    cities.forEach(city => {
+      minX = Math.min(minX, city.position_x);
+      maxX = Math.max(maxX, city.position_x);
+      minY = Math.min(minY, city.position_y);
+      maxY = Math.max(maxY, city.position_y);
+    });
+    
+    // 计算城池的宽度和高度
+    const citiesWidth = maxX - minX;
+    const citiesHeight = maxY - minY;
+    
+    // 计算合适的缩放级别，确保所有城池都能在屏幕内显示
+    const screenRatio = screenWidth / screenHeight;
+    const citiesRatio = citiesWidth / citiesHeight;
+    
+    let optimalScale = 1;
+    if (citiesRatio > screenRatio) {
+      // 以宽度为基准
+      optimalScale = (screenWidth * 0.8) / citiesWidth;
+    } else {
+      // 以高度为基准
+      optimalScale = (screenHeight * 0.8) / citiesHeight;
+    }
+    
+    // 限制缩放范围
+    optimalScale = Math.max(0.5, Math.min(3, optimalScale));
+    setScale(optimalScale);
+    
+    // 计算中心点
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    
+    // 计算需要的滚动位置
+    const mapCenterX = screenWidth / 2;
+    const mapCenterY = screenHeight / 2;
+    const newScrollX = centerX - mapCenterX / optimalScale;
+    const newScrollY = centerY - mapCenterY / optimalScale;
+    
+    // 滚动到中心点
+    if (scrollViewRef.current) {
+      scrollViewRef.current.scrollTo({ x: newScrollX, y: newScrollY, animated: true });
+    }
   };
   
   useEffect(() => {
@@ -57,6 +138,13 @@ const GameMapScreen = () => {
     }
     loadCities();
   }, [params.monarch]);
+  
+  // 当城池数据加载完成后，调整视图以显示所有城池
+  useEffect(() => {
+    if (mapReady && cities.length > 0) {
+      adjustViewToShowAllCities();
+    }
+  }, [mapReady, cities]);
   
   const loadCities = async () => {
     try {
@@ -207,16 +295,53 @@ const GameMapScreen = () => {
         </View>
       </View>
       
-      {/* 地图区域 */}
-      <View style={styles.mapContainer}>
-        <ScrollView 
-          style={styles.scrollView}
-          horizontal={true}
-          bounces={false}
-        >
+      {/* 主内容区域 */}
+      <View style={styles.mainContent}>
+        {/* 左侧城池列表 */}
+        {showCityList && (
+          <View style={[styles.cityListContainer, isDarkMode && styles.darkCityListContainer]}>
+            <View style={styles.cityListHeader}>
+              <Text style={[styles.cityListTitle, isDarkMode && styles.darkText]}>城池列表</Text>
+              <TouchableOpacity onPress={() => setShowCityList(false)}>
+                <Text style={[styles.closeButtonText, isDarkMode && styles.darkText]}>×</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.cityList}>
+              {cities.map((city) => {
+                let cityColor = city.color;
+                if (city.ownerId === '0') {
+                  cityColor = '#999999';
+                } else if (selectedMonarch && city.ownerId === selectedMonarch.id) {
+                  cityColor = selectedMonarch.cityColor;
+                }
+                
+                return (
+                  <TouchableOpacity
+                    key={city.id}
+                    style={[styles.cityListItem, isDarkMode && styles.darkCityListItem]}
+                    onPress={() => handleCityListItemPress(city)}
+                  >
+                    <View style={[styles.cityListColor, { backgroundColor: cityColor }]} />
+                    <Text style={[styles.cityListName, isDarkMode && styles.darkText]}>{city.name}</Text>
+                    <Text style={[styles.cityListOwner, isDarkMode && styles.darkText]}>
+                      {city.ownerId === '0' ? '无' : `ID: ${city.ownerId}`}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+        
+        {/* 地图区域 */}
+        <View style={styles.mapContainer}>
           <ScrollView 
-            style={styles.scrollViewInner}
+            ref={scrollViewRef}
+            style={styles.scrollView}
+            horizontal={true}
             bounces={false}
+            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
           >
             <View style={styles.mapContent}>
               {/* 城池 */}
@@ -248,6 +373,7 @@ const GameMapScreen = () => {
                         styles.cityCircle, 
                         { 
                           backgroundColor: cityColor,
+                          transform: [{ scale }]
                         }
                       ]} 
                     />
@@ -256,6 +382,7 @@ const GameMapScreen = () => {
                         styles.flagPole, 
                         { 
                           backgroundColor: '#8B4513',
+                          transform: [{ scale }]
                         }
                       ]} 
                     />
@@ -264,10 +391,14 @@ const GameMapScreen = () => {
                         styles.flag, 
                         { 
                           backgroundColor: cityColor,
+                          transform: [{ scale }]
                         }
                       ]} 
                     />
-                    <Text style={styles.cityNameText}>
+                    <Text style={[
+                      styles.cityNameText,
+                      { transform: [{ scale }] }
+                    ]}>
                       {city.name}
                     </Text>
                   </TouchableOpacity>
@@ -275,7 +406,33 @@ const GameMapScreen = () => {
               })}
             </View>
           </ScrollView>
-        </ScrollView>
+          
+          {/* 缩放控制 */}
+          <View style={styles.zoomControls}>
+            <TouchableOpacity
+              style={[styles.zoomButton, isDarkMode && styles.darkZoomButton]}
+              onPress={() => handleZoom(1.2)}
+            >
+              <Text style={[styles.zoomButtonText, isDarkMode && styles.darkText]}>+</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.zoomButton, isDarkMode && styles.darkZoomButton]}
+              onPress={() => handleZoom(0.8)}
+            >
+              <Text style={[styles.zoomButtonText, isDarkMode && styles.darkText]}>-</Text>
+            </TouchableOpacity>
+          </View>
+          
+          {/* 显示/隐藏城池列表按钮 */}
+          <TouchableOpacity
+            style={[styles.toggleCityListButton, isDarkMode && styles.darkToggleCityListButton]}
+            onPress={() => setShowCityList(!showCityList)}
+          >
+            <Text style={[styles.toggleCityListText, isDarkMode && styles.darkText]}>
+              {showCityList ? '≡' : '≡'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
       
       {/* 城池信息弹窗 */}
@@ -362,20 +519,150 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginLeft: 5,
   },
+  mainContent: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  cityListContainer: {
+    width: 200,
+    backgroundColor: '#e8e0d0',
+    borderRightWidth: 1,
+    borderRightColor: '#d4d4d0',
+  },
+  darkCityListContainer: {
+    width: 200,
+    backgroundColor: '#2a2a2a',
+    borderRightWidth: 1,
+    borderRightColor: '#3a3a3a',
+  },
+  cityListHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#d4d4d0',
+  },
+  cityListTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#2c2c2c',
+  },
+  cityList: {
+    flex: 1,
+  },
+  cityListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#d4d4d0',
+  },
+  darkCityListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#3a3a3a',
+  },
+  cityListColor: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    marginRight: 10,
+  },
+  cityListName: {
+    flex: 1,
+    fontSize: 14,
+    color: '#2c2c2c',
+  },
+  cityListOwner: {
+    fontSize: 12,
+    color: '#666666',
+  },
   mapContainer: {
     flex: 1,
     backgroundColor: '#f0e6d2',
+    position: 'relative',
   },
   scrollView: {
     flex: 1,
   },
-  scrollViewInner: {
-    flex: 1,
-  },
   mapContent: {
-    width: 2000,
-    height: 1500,
+    width: 3000,
+    height: 2000,
     position: 'relative',
+  },
+  zoomControls: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+  },
+  zoomButton: {
+    width: 40,
+    height: 40,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  darkZoomButton: {
+    width: 40,
+    height: 40,
+    backgroundColor: '#3a3a3a',
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  zoomButtonText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2c2c2c',
+  },
+  toggleCityListButton: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    width: 40,
+    height: 40,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  darkToggleCityListButton: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    width: 40,
+    height: 40,
+    backgroundColor: '#3a3a3a',
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  toggleCityListText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2c2c2c',
   },
   cityContainer: {
     position: 'absolute',
