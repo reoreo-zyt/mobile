@@ -144,7 +144,7 @@ const SelectMonarchScreen = () => {
             }
             
             return {
-              id: (index + 1).toString(),
+              id: item['id'],
               name: item['name'] || item['Name'] || item['NAME'] || item['君主'] || '未知',
               cityColor: color,
               cityCount: cityCount

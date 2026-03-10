@@ -307,13 +307,15 @@ const GameMapScreen = () => {
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.cityList}>
-              {cities.map((city) => {
+              {
+              cities
+                .filter(city => selectedMonarch && city.ownerId === selectedMonarch.id)
+                .map((city) => {
                 let cityColor = city.color;
-                if (city.ownerId === '0') {
-                  cityColor = '#999999';
-                } else if (selectedMonarch && city.ownerId === selectedMonarch.id) {
+                if (selectedMonarch && city.ownerId === selectedMonarch.id) {
                   cityColor = selectedMonarch.cityColor;
                 }
+                console.log(city, selectedMonarch, '==data==')
                 
                 return (
                   <TouchableOpacity
@@ -324,7 +326,7 @@ const GameMapScreen = () => {
                     <View style={[styles.cityListColor, { backgroundColor: cityColor }]} />
                     <Text style={[styles.cityListName, isDarkMode && styles.darkText]}>{city.name}</Text>
                     <Text style={[styles.cityListOwner, isDarkMode && styles.darkText]}>
-                      {city.ownerId === '0' ? '无' : `ID: ${city.ownerId}`}
+                      君主: {selectedMonarch?.name || '未知'}
                     </Text>
                   </TouchableOpacity>
                 );
