@@ -53,7 +53,10 @@ const GameMapScreen = () => {
   
   // 创建PanResponder处理地图拖动
   const panResponder = PanResponder.create({
-    onMoveShouldSetPanResponder: () => true,
+    onStartShouldSetPanResponderCapture: () => false,
+    onMoveShouldSetPanResponder: (_, gestureState) => {
+      return Math.abs(gestureState.dx) > 5 || Math.abs(gestureState.dy) > 5;
+    },
     onPanResponderMove: (_, gestureState) => {
       pan.setValue({
         x: mapX + gestureState.dx,
@@ -351,45 +354,45 @@ const GameMapScreen = () => {
         </View>
       </View>
       
+      {/* 左侧城池列表 - 放在地图后面以显示在上层 */}
+      {showCityList && (
+        <View style={[styles.cityListContainer, isDarkMode && styles.darkCityListContainer, styles.cityListOverlay]}>
+          <View style={styles.cityListHeader}>
+            <Text style={[styles.cityListTitle, isDarkMode && styles.darkText]}>城池列表</Text>
+            <TouchableOpacity onPress={() => setShowCityList(false)}>
+              <Text style={[styles.closeButtonText, isDarkMode && styles.darkText]}>×</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.cityList}>
+            {
+            cities
+              .filter(city => selectedMonarch && city.ownerId === selectedMonarch.id)
+              .map((city) => {
+              let cityColor = city.color;
+              if (selectedMonarch && city.ownerId === selectedMonarch.id) {
+                cityColor = selectedMonarch.cityColor;
+              }
+              
+              return (
+                <TouchableOpacity
+                  key={city.id}
+                  style={[styles.cityListItem, isDarkMode && styles.darkCityListItem]}
+                  onPress={() => handleCityListItemPress(city)}
+                >
+                  <View style={[styles.cityListColor, { backgroundColor: cityColor }]} />
+                  <Text style={[styles.cityListName, isDarkMode && styles.darkText]}>{city.name}</Text>
+                  <Text style={[styles.cityListOwner, isDarkMode && styles.darkText]}>
+                    君主: {selectedMonarch?.name || '未知'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+      
       {/* 主内容区域 */}
       <View style={styles.mainContent}>
-        {/* 左侧城池列表 */}
-        {showCityList && (
-          <View style={[styles.cityListContainer, isDarkMode && styles.darkCityListContainer]}>
-            <View style={styles.cityListHeader}>
-              <Text style={[styles.cityListTitle, isDarkMode && styles.darkText]}>城池列表</Text>
-              <TouchableOpacity onPress={() => setShowCityList(false)}>
-                <Text style={[styles.closeButtonText, isDarkMode && styles.darkText]}>×</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.cityList}>
-              {
-              cities
-                .filter(city => selectedMonarch && city.ownerId === selectedMonarch.id)
-                .map((city) => {
-                let cityColor = city.color;
-                if (selectedMonarch && city.ownerId === selectedMonarch.id) {
-                  cityColor = selectedMonarch.cityColor;
-                }
-                
-                return (
-                  <TouchableOpacity
-                    key={city.id}
-                    style={[styles.cityListItem, isDarkMode && styles.darkCityListItem]}
-                    onPress={() => handleCityListItemPress(city)}
-                  >
-                    <View style={[styles.cityListColor, { backgroundColor: cityColor }]} />
-                    <Text style={[styles.cityListName, isDarkMode && styles.darkText]}>{city.name}</Text>
-                    <Text style={[styles.cityListOwner, isDarkMode && styles.darkText]}>
-                      君主: {selectedMonarch?.name || '未知'}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        )}
-        
         {/* 地图区域 */}
         <View style={styles.mapContainer}>
           <View style={styles.scrollView} {...panResponder.panHandlers}>
@@ -588,6 +591,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#e8e0d0',
     borderRightWidth: 1,
     borderRightColor: '#d4d4d0',
+  },
+  cityListOverlay: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 100,
   },
   darkCityListContainer: {
     width: 200,
@@ -795,6 +805,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
+    zIndex: 200,
   },
   darkCityModal: {
     position: 'absolute',
