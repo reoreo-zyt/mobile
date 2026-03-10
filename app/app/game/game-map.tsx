@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView, PanResponder, Animated } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as XLSX from 'xlsx';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import LoadingSpinner from '@/components/LoadingSpinner';
 
 interface Monarch {
   id: string;
@@ -40,7 +39,10 @@ const GameMapScreen = () => {
   const [selectedMonarch, setSelectedMonarch] = useState<Monarch | null>(null);
   const [monarchs, setMonarchs] = useState<Monarch[]>([]);
   const [cities, setCities] = useState<City[]>([]);
+  const [generals, setGenerals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [loadingText, setLoadingText] = useState('加载游戏数据中...');
   const [isDarkMode, setIsDarkMode] = useState(colorScheme === 'dark');
   const [selectedCity, setSelectedCity] = useState<City | null>(null);
   const [year, setYear] = useState(189);
@@ -173,6 +175,359 @@ const GameMapScreen = () => {
     pan.setValue({ x: newMapX, y: newMapY });
   };
   
+  const loadGameData = async () => {
+    try {
+      setLoading(true);
+      setLoadingProgress(0);
+      setLoadingText('加载游戏数据中...');
+      
+      console.log('Loading game data from Excel file...');
+      
+      // 尝试使用不同的路径加载 Excel 文件
+      const possiblePaths = [
+        '/311_data.xlsx',
+      ];
+      
+      let data: ArrayBuffer | null = null;
+      
+      for (const path of possiblePaths) {
+        try {
+          console.log(`Trying to fetch Excel file from: ${path}`);
+          setLoadingProgress(10);
+          setLoadingText(`载入游戏中...`);
+          const response = await fetch(path);
+          
+          if (!response.ok) {
+            console.log(`Fetch failed with status: ${response.status}`);
+            continue;
+          }
+          
+          data = await response.arrayBuffer();
+          console.log(`Excel file fetched successfully from: ${path}`);
+          setLoadingProgress(30);
+          setLoadingText(`载入游戏中...`);
+          break;
+        } catch (fetchError) {
+          console.log(`Error fetching from ${path}:`, fetchError);
+          continue;
+        }
+      }
+      
+      if (data && data instanceof ArrayBuffer) {
+        // 解析 Excel 文件
+        console.log('Parsing Excel file...');
+        try {
+          const workbook = XLSX.read(data, { type: 'array' });
+          
+          // 加载君主表
+          setLoadingProgress(40);
+          setLoadingText('正在加载君主数据...');
+          if (workbook.Sheets['君主表']) {
+            const worksheet = workbook.Sheets['君主表'];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet);
+            
+            console.log(`Found ${jsonData.length} monarchs in Excel file`);
+            
+            // 转换数据格式
+            console.log('Excel data keys:', Object.keys(jsonData[0] || {}));
+            console.log('First item data:', jsonData[0] || {});
+            
+            const parsedMonarchs: Monarch[] = jsonData.map((item: any, index: number) => {
+              // 计算城池数量
+              let cityCount = 0;
+              if (item['citys'] || item['cities'] || item['城市']) {
+                const cityField = item['citys'] || item['cities'] || item['城市'];
+                cityCount = cityField.split(',').length;
+              }
+              
+              // 尝试获取颜色字段，支持不同的字段名
+              let color = '#999999';
+              
+              // 支持多种可能的颜色字段名称
+              const colorFields = ['color', 'Color', 'COLOR', '颜色', 'colour', 'Colour', 'COLOUR'];
+              let foundColor = false;
+              
+              for (const field of colorFields) {
+                if (item[field]) {
+                  color = item[field];
+                  foundColor = true;
+                  console.log(`Monarch ${item['name'] || '未知'} color from ${field}: ${color}`);
+                  break;
+                }
+              }
+              
+              if (!foundColor) {
+                console.log(`Monarch ${item['name'] || '未知'} has no color field`);
+              }
+              
+              // 确保颜色值是有效的十六进制格式
+              if (typeof color === 'string') {
+                // 如果是颜色名称，转换为十六进制
+                const colorNameMap: { [key: string]: string } = {
+                  'red': '#ff0000',
+                  'green': '#00ff00',
+                  'blue': '#0000ff',
+                  'yellow': '#ffff00',
+                  'purple': '#800080',
+                  'orange': '#ffa500',
+                  'pink': '#ffc0cb',
+                  'brown': '#a52a2a',
+                  'gray': '#808080',
+                  'grey': '#808080',
+                  'black': '#000000',
+                  'white': '#ffffff'
+                };
+                
+                // 转换颜色名称
+                const lowerColor = color.toLowerCase();
+                if (colorNameMap[lowerColor]) {
+                  color = colorNameMap[lowerColor];
+                  console.log(`Converted color name ${color} to hex: ${color}`);
+                }
+                
+                // 确保是有效的十六进制颜色
+                if (!color.match(/^#[0-9A-Fa-f]{6}$/)) {
+                  console.log(`Invalid color format: ${color}, using default gray`);
+                  color = '#999999';
+                }
+              }
+              
+              return {
+                id: item['id'],
+                name: item['name'] || item['Name'] || item['NAME'] || item['君主'] || '未知',
+                cityColor: color,
+                cityCount: cityCount
+              };
+            });
+            
+            console.log('Monarch data processed successfully');
+            setMonarchs(parsedMonarchs);
+          } else {
+            console.log('君主表 not found in Excel file, using mock data');
+            // 使用模拟数据
+            const mockMonarchs: Monarch[] = [
+              { id: '1', name: '曹操', cityColor: '#ff0000', cityCount: 5 },
+              { id: '2', name: '刘备', cityColor: '#00ff00', cityCount: 3 },
+              { id: '3', name: '孙权', cityColor: '#0000ff', cityCount: 4 },
+              { id: '4', name: '袁绍', cityColor: '#ffff00', cityCount: 6 },
+              { id: '5', name: '袁术', cityColor: '#ff00ff', cityCount: 2 }
+            ];
+            setMonarchs(mockMonarchs);
+          }
+          
+          // 加载武将表
+          setLoadingProgress(60);
+          setLoadingText('正在加载武将数据...');
+          let generalsData: any[] = [];
+          if (workbook.Sheets['武将表']) {
+            const worksheet = workbook.Sheets['武将表'];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet);
+            
+            console.log(`Found ${jsonData.length} generals in Excel file`);
+            
+            // 转换数据格式
+            console.log('Excel general data keys:', Object.keys(jsonData[0] || {}));
+            console.log('First general item data:', jsonData[0] || {});
+            
+            generalsData = jsonData.map((item: any) => ({
+              id: item['id'],
+              name: item['name'] || item['Name'] || item['NAME'] || '未知',
+              cityId: item['cityId'] || item['city_id'] || item['CityId'] || item['CITYID'] || '0'
+            }));
+            
+            console.log('General data processed successfully');
+            setGenerals(generalsData);
+          } else {
+            console.log('武将表 not found in Excel file, using mock data');
+            // 使用模拟数据
+            const mockGenerals = [
+              { id: '1', name: '夏侯惇', cityId: '1' },
+              { id: '2', name: '张辽', cityId: '1' },
+              { id: '3', name: '关羽', cityId: '3' },
+              { id: '4', name: '张飞', cityId: '3' },
+              { id: '5', name: '周瑜', cityId: '4' },
+              { id: '6', name: '陆逊', cityId: '4' },
+              { id: '7', name: '袁绍', cityId: '2' },
+              { id: '8', name: '袁术', cityId: '5' }
+            ];
+            generalsData = mockGenerals;
+            setGenerals(mockGenerals);
+          }
+          
+          // 加载城池表
+          setLoadingProgress(80);
+          setLoadingText('正在加载城池数据...');
+          if (workbook.Sheets['城池表']) {
+            const worksheet = workbook.Sheets['城池表'];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet);
+            
+            console.log(`Found ${jsonData.length} cities in Excel file`);
+            
+            // 转换数据格式
+            console.log('Excel city data keys:', Object.keys(jsonData[0] || {}));
+            console.log('First city item data:', jsonData[0] || {});
+            
+            const parsedCities: City[] = jsonData.map((item: any, index: number) => {
+              // 统计该城市的武将数量
+              const generalCount = generalsData.filter(general => general.cityId === item['id']).length;
+              
+              return {
+                id: item['id'],
+                name: item['name'] || item['Name'] || item['NAME'] || '城市' || '未知',
+                position_x: parseFloat(item['position_x'] || item['positionX'] || item['PositionX'] || '0'),
+                position_y: parseFloat(item['position_y'] || item['positionY'] || item['PositionY'] || '0'),
+                ownerId: item['ownerId'] || item['owner_id'] || item['OwnerId'] || item['OWNERID'] || '0',
+                color: '#999999', // 默认灰色
+                rule: parseFloat(item['统治值'] || item['rule'] || '0'),
+                population: parseFloat(item['人口'] || item['population'] || '0'),
+                soldiers: parseFloat(item['兵力'] || item['soldiers'] || '0'),
+                agriculture: parseFloat(item['农业'] || item['agriculture'] || '0'),
+                commerce: parseFloat(item['商业'] || item['commerce'] || '0'),
+                waterControl: parseFloat(item['治水'] || item['waterControl'] || '0'),
+                gold: parseFloat(item['金'] || item['gold'] || '0'),
+                grain: parseFloat(item['粮'] || item['grain'] || '0'),
+                generalCount: generalCount
+              };
+            });
+            
+            console.log('City data processed successfully');
+            setCities(parsedCities);
+          } else {
+            console.log('城池表 not found in Excel file, using mock data');
+            // 使用模拟数据
+            const mockCities: City[] = [
+              { id: '1', name: '洛阳', position_x: 100, position_y: 100, ownerId: '1', color: '#ff0000', rule: 90, population: 100000, soldiers: 50000, agriculture: 80, commerce: 90, waterControl: 70, gold: 50000, grain: 100000, generalCount: 5 },
+              { id: '2', name: '长安', position_x: 200, position_y: 150, ownerId: '1', color: '#ff0000', rule: 85, population: 90000, soldiers: 45000, agriculture: 75, commerce: 85, waterControl: 65, gold: 45000, grain: 90000, generalCount: 4 },
+              { id: '3', name: '成都', position_x: 300, position_y: 200, ownerId: '2', color: '#00ff00', rule: 80, population: 80000, soldiers: 40000, agriculture: 90, commerce: 70, waterControl: 85, gold: 40000, grain: 120000, generalCount: 3 },
+              { id: '4', name: '建业', position_x: 400, position_y: 100, ownerId: '3', color: '#0000ff', rule: 88, population: 95000, soldiers: 48000, agriculture: 70, commerce: 95, waterControl: 80, gold: 55000, grain: 85000, generalCount: 4 },
+              { id: '5', name: '襄阳', position_x: 250, position_y: 120, ownerId: '0', color: '#999999', rule: 70, population: 60000, soldiers: 30000, agriculture: 65, commerce: 60, waterControl: 75, gold: 30000, grain: 70000, generalCount: 2 }
+            ];
+            setCities(mockCities);
+          }
+          
+          setLoadingProgress(100);
+          setLoadingText('加载完成！');
+          setMapReady(true);
+        } catch (parseError) {
+          console.error('Error parsing Excel file:', parseError);
+          // 使用模拟数据
+          console.log('Using mock data due to parsing error...');
+          
+          // 模拟君主数据
+          const mockMonarchs: Monarch[] = [
+            { id: '1', name: '曹操', cityColor: '#ff0000', cityCount: 5 },
+            { id: '2', name: '刘备', cityColor: '#00ff00', cityCount: 3 },
+            { id: '3', name: '孙权', cityColor: '#0000ff', cityCount: 4 },
+            { id: '4', name: '袁绍', cityColor: '#ffff00', cityCount: 6 },
+            { id: '5', name: '袁术', cityColor: '#ff00ff', cityCount: 2 }
+          ];
+          setMonarchs(mockMonarchs);
+          
+          // 模拟武将数据
+          const mockGenerals = [
+            { id: '1', name: '夏侯惇', cityId: '1' },
+            { id: '2', name: '张辽', cityId: '1' },
+            { id: '3', name: '关羽', cityId: '3' },
+            { id: '4', name: '张飞', cityId: '3' },
+            { id: '5', name: '周瑜', cityId: '4' },
+            { id: '6', name: '陆逊', cityId: '4' },
+            { id: '7', name: '袁绍', cityId: '2' },
+            { id: '8', name: '袁术', cityId: '5' }
+          ];
+          setGenerals(mockGenerals);
+          
+          // 模拟城池数据
+          const mockCities: City[] = [
+            { id: '1', name: '洛阳', position_x: 100, position_y: 100, ownerId: '1', color: '#ff0000', rule: 90, population: 100000, soldiers: 50000, agriculture: 80, commerce: 90, waterControl: 70, gold: 50000, grain: 100000, generalCount: 5 },
+            { id: '2', name: '长安', position_x: 200, position_y: 150, ownerId: '1', color: '#ff0000', rule: 85, population: 90000, soldiers: 45000, agriculture: 75, commerce: 85, waterControl: 65, gold: 45000, grain: 90000, generalCount: 4 },
+            { id: '3', name: '成都', position_x: 300, position_y: 200, ownerId: '2', color: '#00ff00', rule: 80, population: 80000, soldiers: 40000, agriculture: 90, commerce: 70, waterControl: 85, gold: 40000, grain: 120000, generalCount: 3 },
+            { id: '4', name: '建业', position_x: 400, position_y: 100, ownerId: '3', color: '#0000ff', rule: 88, population: 95000, soldiers: 48000, agriculture: 70, commerce: 95, waterControl: 80, gold: 55000, grain: 85000, generalCount: 4 },
+            { id: '5', name: '襄阳', position_x: 250, position_y: 120, ownerId: '0', color: '#999999', rule: 70, population: 60000, soldiers: 30000, agriculture: 65, commerce: 60, waterControl: 75, gold: 30000, grain: 70000, generalCount: 2 }
+          ];
+          setCities(mockCities);
+          setMapReady(true);
+        }
+      } else {
+        // 备用方案：使用模拟数据
+        console.log('Using mock data as fallback...');
+        
+        // 模拟君主数据
+        const mockMonarchs: Monarch[] = [
+          { id: '1', name: '曹操', cityColor: '#ff0000', cityCount: 5 },
+          { id: '2', name: '刘备', cityColor: '#00ff00', cityCount: 3 },
+          { id: '3', name: '孙权', cityColor: '#0000ff', cityCount: 4 },
+          { id: '4', name: '袁绍', cityColor: '#ffff00', cityCount: 6 },
+          { id: '5', name: '袁术', cityColor: '#ff00ff', cityCount: 2 }
+        ];
+        setMonarchs(mockMonarchs);
+        
+        // 模拟武将数据
+        const mockGenerals = [
+          { id: '1', name: '夏侯惇', cityId: '1' },
+          { id: '2', name: '张辽', cityId: '1' },
+          { id: '3', name: '关羽', cityId: '3' },
+          { id: '4', name: '张飞', cityId: '3' },
+          { id: '5', name: '周瑜', cityId: '4' },
+          { id: '6', name: '陆逊', cityId: '4' },
+          { id: '7', name: '袁绍', cityId: '2' },
+          { id: '8', name: '袁术', cityId: '5' }
+        ];
+        setGenerals(mockGenerals);
+        
+        // 模拟城池数据
+        const mockCities: City[] = [
+          { id: '1', name: '洛阳', position_x: 100, position_y: 100, ownerId: '1', color: '#ff0000', rule: 90, population: 100000, soldiers: 50000, agriculture: 80, commerce: 90, waterControl: 70, gold: 50000, grain: 100000, generalCount: 5 },
+          { id: '2', name: '长安', position_x: 200, position_y: 150, ownerId: '1', color: '#ff0000', rule: 85, population: 90000, soldiers: 45000, agriculture: 75, commerce: 85, waterControl: 65, gold: 45000, grain: 90000, generalCount: 4 },
+          { id: '3', name: '成都', position_x: 300, position_y: 200, ownerId: '2', color: '#00ff00', rule: 80, population: 80000, soldiers: 40000, agriculture: 90, commerce: 70, waterControl: 85, gold: 40000, grain: 120000, generalCount: 3 },
+          { id: '4', name: '建业', position_x: 400, position_y: 100, ownerId: '3', color: '#0000ff', rule: 88, population: 95000, soldiers: 48000, agriculture: 70, commerce: 95, waterControl: 80, gold: 55000, grain: 85000, generalCount: 4 },
+          { id: '5', name: '襄阳', position_x: 250, position_y: 120, ownerId: '0', color: '#999999', rule: 70, population: 60000, soldiers: 30000, agriculture: 65, commerce: 60, waterControl: 75, gold: 30000, grain: 70000, generalCount: 2 }
+        ];
+        setCities(mockCities);
+        setMapReady(true);
+      }
+    } catch (error) {
+      console.error('Error loading game data:', error);
+      // 提供详细的错误信息，但不抛出异常，使用模拟数据
+      console.log('Using mock data due to error...');
+      
+      // 模拟君主数据
+      const mockMonarchs: Monarch[] = [
+        { id: '1', name: '曹操', cityColor: '#ff0000', cityCount: 5 },
+        { id: '2', name: '刘备', cityColor: '#00ff00', cityCount: 3 },
+        { id: '3', name: '孙权', cityColor: '#0000ff', cityCount: 4 },
+        { id: '4', name: '袁绍', cityColor: '#ffff00', cityCount: 6 },
+        { id: '5', name: '袁术', cityColor: '#ff00ff', cityCount: 2 }
+      ];
+      setMonarchs(mockMonarchs);
+      
+      // 模拟武将数据
+      const mockGenerals = [
+        { id: '1', name: '夏侯惇', cityId: '1' },
+        { id: '2', name: '张辽', cityId: '1' },
+        { id: '3', name: '关羽', cityId: '3' },
+        { id: '4', name: '张飞', cityId: '3' },
+        { id: '5', name: '周瑜', cityId: '4' },
+        { id: '6', name: '陆逊', cityId: '4' },
+        { id: '7', name: '袁绍', cityId: '2' },
+        { id: '8', name: '袁术', cityId: '5' }
+      ];
+      setGenerals(mockGenerals);
+      
+      // 模拟城池数据
+      const mockCities: City[] = [
+        { id: '1', name: '洛阳', position_x: 100, position_y: 100, ownerId: '1', color: '#ff0000', rule: 90, population: 100000, soldiers: 50000, agriculture: 80, commerce: 90, waterControl: 70, gold: 50000, grain: 100000, generalCount: 5 },
+        { id: '2', name: '长安', position_x: 200, position_y: 150, ownerId: '1', color: '#ff0000', rule: 85, population: 90000, soldiers: 45000, agriculture: 75, commerce: 85, waterControl: 65, gold: 45000, grain: 90000, generalCount: 4 },
+        { id: '3', name: '成都', position_x: 300, position_y: 200, ownerId: '2', color: '#00ff00', rule: 80, population: 80000, soldiers: 40000, agriculture: 90, commerce: 70, waterControl: 85, gold: 40000, grain: 120000, generalCount: 3 },
+        { id: '4', name: '建业', position_x: 400, position_y: 100, ownerId: '3', color: '#0000ff', rule: 88, population: 95000, soldiers: 48000, agriculture: 70, commerce: 95, waterControl: 80, gold: 55000, grain: 85000, generalCount: 4 },
+        { id: '5', name: '襄阳', position_x: 250, position_y: 120, ownerId: '0', color: '#999999', rule: 70, population: 60000, soldiers: 30000, agriculture: 65, commerce: 60, waterControl: 75, gold: 30000, grain: 70000, generalCount: 2 }
+      ];
+      setCities(mockCities);
+      setMapReady(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
   useEffect(() => {
     // 从参数中获取选中的君主信息
     if (params.monarch) {
@@ -183,8 +538,7 @@ const GameMapScreen = () => {
         console.error('Failed to parse monarch data:', error);
       }
     }
-    loadMonarchs();
-    loadCities();
+    loadGameData();
   }, [params.monarch]);
   
   // 当城池数据加载完成后，调整视图以显示所有城池
@@ -227,312 +581,22 @@ const GameMapScreen = () => {
     }
   }, [selectedMonarch, cities, scale, pan]);
   
-  const loadMonarchs = async () => {
-    try {
-      console.log('Loading monarch data from Excel file...');
-      
-      // 尝试使用不同的路径加载 Excel 文件
-      const possiblePaths = [
-        '311_data.xlsx',
-        './311_data.xlsx',
-        './public/311_data.xlsx',
-        '/311_data.xlsx',
-        '/public/311_data.xlsx',
-        'https://localhost:8081/311_data.xlsx',
-        'https://localhost:8081/public/311_data.xlsx',
-        'https://localhost:8082/311_data.xlsx',
-        'https://localhost:8082/public/311_data.xlsx'
-      ];
-      
-      let data: ArrayBuffer | null = null;
-      
-      for (const path of possiblePaths) {
-        try {
-          console.log(`Trying to fetch Excel file from: ${path}`);
-          const response = await fetch(path);
-          
-          if (!response.ok) {
-            console.log(`Fetch failed with status: ${response.status}`);
-            continue;
-          }
-          
-          data = await response.arrayBuffer();
-          console.log(`Excel file fetched successfully from: ${path}`);
-          break;
-        } catch (fetchError) {
-          console.log(`Error fetching from ${path}:`, fetchError);
-          continue;
-        }
-      }
-      
-      if (data && data instanceof ArrayBuffer) {
-        // 解析 Excel 文件
-        console.log('Parsing Excel file...');
-        try {
-          const workbook = XLSX.read(data, { type: 'array' });
-          
-          // 检查是否存在君主表
-          if (!workbook.Sheets['君主表']) {
-            throw new Error('君主表 not found in Excel file');
-          }
-          
-          const worksheet = workbook.Sheets['君主表'];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet);
-          
-          console.log(`Found ${jsonData.length} monarchs in Excel file`);
-          
-          // 转换数据格式
-          console.log('Excel data keys:', Object.keys(jsonData[0] || {}));
-          console.log('First item data:', jsonData[0] || {});
-          
-          const parsedMonarchs: Monarch[] = jsonData.map((item: any, index: number) => {
-            // 计算城池数量
-            let cityCount = 0;
-            if (item['citys'] || item['cities'] || item['城市']) {
-              const cityField = item['citys'] || item['cities'] || item['城市'];
-              cityCount = cityField.split(',').length;
-            }
-            
-            // 尝试获取颜色字段，支持不同的字段名
-            let color = '#999999';
-            
-            // 支持多种可能的颜色字段名称
-            const colorFields = ['color', 'Color', 'COLOR', '颜色', 'colour', 'Colour', 'COLOUR'];
-            let foundColor = false;
-            
-            for (const field of colorFields) {
-              if (item[field]) {
-                color = item[field];
-                foundColor = true;
-                console.log(`Monarch ${item['name'] || '未知'} color from ${field}: ${color}`);
-                break;
-              }
-            }
-            
-            if (!foundColor) {
-              console.log(`Monarch ${item['name'] || '未知'} has no color field`);
-            }
-            
-            // 确保颜色值是有效的十六进制格式
-            if (typeof color === 'string') {
-              // 如果是颜色名称，转换为十六进制
-              const colorNameMap: { [key: string]: string } = {
-                'red': '#ff0000',
-                'green': '#00ff00',
-                'blue': '#0000ff',
-                'yellow': '#ffff00',
-                'purple': '#800080',
-                'orange': '#ffa500',
-                'pink': '#ffc0cb',
-                'brown': '#a52a2a',
-                'gray': '#808080',
-                'grey': '#808080',
-                'black': '#000000',
-                'white': '#ffffff'
-              };
-              
-              // 转换颜色名称
-              const lowerColor = color.toLowerCase();
-              if (colorNameMap[lowerColor]) {
-                color = colorNameMap[lowerColor];
-                console.log(`Converted color name ${color} to hex: ${color}`);
-              }
-              
-              // 确保是有效的十六进制颜色
-              if (!color.match(/^#[0-9A-Fa-f]{6}$/)) {
-                console.log(`Invalid color format: ${color}, using default gray`);
-                color = '#999999';
-              }
-            }
-            
-            return {
-              id: item['id'],
-              name: item['name'] || item['Name'] || item['NAME'] || item['君主'] || '未知',
-              cityColor: color,
-              cityCount: cityCount
-            };
-          });
-          
-          console.log('Monarch data processed successfully');
-          setMonarchs(parsedMonarchs);
-        } catch (parseError) {
-          console.error('Error parsing Excel file:', parseError);
-          // 使用模拟数据
-          console.log('Using mock monarch data due to parsing error...');
-          const mockMonarchs: Monarch[] = [
-            { id: '1', name: '曹操', cityColor: '#ff0000', cityCount: 5 },
-            { id: '2', name: '刘备', cityColor: '#00ff00', cityCount: 3 },
-            { id: '3', name: '孙权', cityColor: '#0000ff', cityCount: 4 },
-            { id: '4', name: '袁绍', cityColor: '#ffff00', cityCount: 6 },
-            { id: '5', name: '袁术', cityColor: '#ff00ff', cityCount: 2 }
-          ];
-          
-          setMonarchs(mockMonarchs);
-        }
-      } else {
-        // 备用方案：使用模拟数据
-        console.log('Using mock data as fallback...');
-        const mockMonarchs: Monarch[] = [
-          { id: '1', name: '曹操', cityColor: '#ff0000', cityCount: 5 },
-          { id: '2', name: '刘备', cityColor: '#00ff00', cityCount: 3 },
-          { id: '3', name: '孙权', cityColor: '#0000ff', cityCount: 4 },
-          { id: '4', name: '袁绍', cityColor: '#ffff00', cityCount: 6 },
-          { id: '5', name: '袁术', cityColor: '#ff00ff', cityCount: 2 }
-        ];
-        
-        console.log('Using mock monarch data');
-        setMonarchs(mockMonarchs);
-      }
-    } catch (error) {
-      console.error('Error loading monarchs:', error);
-      // 提供详细的错误信息，但不抛出异常，使用模拟数据
-      console.log('Using mock data due to error...');
-      const mockMonarchs: Monarch[] = [
-        { id: '1', name: '曹操', cityColor: '#ff0000', cityCount: 5 },
-        { id: '2', name: '刘备', cityColor: '#00ff00', cityCount: 3 },
-        { id: '3', name: '孙权', cityColor: '#0000ff', cityCount: 4 },
-        { id: '4', name: '袁绍', cityColor: '#ffff00', cityCount: 6 },
-        { id: '5', name: '袁术', cityColor: '#ff00ff', cityCount: 2 }
-      ];
-      
-      setMonarchs(mockMonarchs);
-    }
-  };
 
-  const loadCities = async () => {
-    try {
-      console.log('Loading city data from Excel file...');
-      
-      // 尝试使用不同的路径加载 Excel 文件
-      const possiblePaths = [
-        '311_data.xlsx',
-        './311_data.xlsx',
-        './public/311_data.xlsx',
-        '/311_data.xlsx',
-        '/public/311_data.xlsx',
-        'https://localhost:8081/311_data.xlsx',
-        'https://localhost:8081/public/311_data.xlsx',
-        'https://localhost:8082/311_data.xlsx',
-        'https://localhost:8082/public/311_data.xlsx'
-      ];
-      
-      let data: ArrayBuffer | null = null;
-      
-      for (const path of possiblePaths) {
-        try {
-          console.log(`Trying to fetch Excel file from: ${path}`);
-          const response = await fetch(path);
-          
-          if (!response.ok) {
-            console.log(`Fetch failed with status: ${response.status}`);
-            continue;
-          }
-          
-          data = await response.arrayBuffer();
-          console.log(`Excel file fetched successfully from: ${path}`);
-          break;
-        } catch (fetchError) {
-          console.log(`Error fetching from ${path}:`, fetchError);
-          continue;
-        }
-      }
-      
-      if (data && data instanceof ArrayBuffer) {
-        // 解析 Excel 文件
-        console.log('Parsing Excel file...');
-        try {
-          const workbook = XLSX.read(data, { type: 'array' });
-        
-          // 检查是否存在城池表
-          if (!workbook.Sheets['城池表']) {
-            throw new Error('城池表 not found in Excel file');
-          }
-          
-          const worksheet = workbook.Sheets['城池表'];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet);
-          
-          console.log(`Found ${jsonData.length} cities in Excel file`);
-          
-          // 转换数据格式
-          console.log('Excel city data keys:', Object.keys(jsonData[0] || {}));
-          console.log('First city item data:', jsonData[0] || {});
-          
-          const parsedCities: City[] = jsonData.map((item: any, index: number) => {
-            return {
-              id: (index + 1).toString(),
-              name: item['name'] || item['Name'] || item['NAME'] || '城市' || '未知',
-              position_x: parseFloat(item['position_x'] || item['positionX'] || item['PositionX'] || '0'),
-              position_y: parseFloat(item['position_y'] || item['positionY'] || item['PositionY'] || '0'),
-              ownerId: item['ownerId'] || item['owner_id'] || item['OwnerId'] || item['OWNERID'] || '0',
-              color: '#999999', // 默认灰色
-              rule: parseFloat(item['统治值'] || item['rule'] || '0'),
-              population: parseFloat(item['人口'] || item['population'] || '0'),
-              soldiers: parseFloat(item['兵力'] || item['soldiers'] || '0'),
-              agriculture: parseFloat(item['农业'] || item['agriculture'] || '0'),
-              commerce: parseFloat(item['商业'] || item['commerce'] || '0'),
-              waterControl: parseFloat(item['治水'] || item['waterControl'] || '0'),
-              gold: parseFloat(item['金'] || item['gold'] || '0'),
-              grain: parseFloat(item['粮'] || item['grain'] || '0'),
-              generalCount: 0 // 暂时默认为0，后续从武将表中统计
-            };
-          });
-          
-          console.log('City data processed successfully');
-          setCities(parsedCities);
-          setMapReady(true);
-        } catch (parseError) {
-          console.error('Error parsing Excel file:', parseError);
-          // 使用模拟数据
-          console.log('Using mock city data due to parsing error...');
-          const mockCities: City[] = [
-            { id: '1', name: '洛阳', position_x: 100, position_y: 100, ownerId: '1', color: '#ff0000', rule: 90, population: 100000, soldiers: 50000, agriculture: 80, commerce: 90, waterControl: 70, gold: 50000, grain: 100000, generalCount: 5 },
-            { id: '2', name: '长安', position_x: 200, position_y: 150, ownerId: '1', color: '#ff0000', rule: 85, population: 90000, soldiers: 45000, agriculture: 75, commerce: 85, waterControl: 65, gold: 45000, grain: 90000, generalCount: 4 },
-            { id: '3', name: '成都', position_x: 300, position_y: 200, ownerId: '2', color: '#00ff00', rule: 80, population: 80000, soldiers: 40000, agriculture: 90, commerce: 70, waterControl: 85, gold: 40000, grain: 120000, generalCount: 3 },
-            { id: '4', name: '建业', position_x: 400, position_y: 100, ownerId: '3', color: '#0000ff', rule: 88, population: 95000, soldiers: 48000, agriculture: 70, commerce: 95, waterControl: 80, gold: 55000, grain: 85000, generalCount: 4 },
-            { id: '5', name: '襄阳', position_x: 250, position_y: 120, ownerId: '0', color: '#999999', rule: 70, population: 60000, soldiers: 30000, agriculture: 65, commerce: 60, waterControl: 75, gold: 30000, grain: 70000, generalCount: 2 }
-          ];
-          
-          setCities(mockCities);
-          setMapReady(true);
-        }
-      } else {
-        // 备用方案：使用模拟数据
-        console.log('Using mock city data as fallback...');
-        const mockCities: City[] = [
-          { id: '1', name: '洛阳', position_x: 100, position_y: 100, ownerId: '1', color: '#ff0000', rule: 90, population: 100000, soldiers: 50000, agriculture: 80, commerce: 90, waterControl: 70, gold: 50000, grain: 100000, generalCount: 5 },
-          { id: '2', name: '长安', position_x: 200, position_y: 150, ownerId: '1', color: '#ff0000', rule: 85, population: 90000, soldiers: 45000, agriculture: 75, commerce: 85, waterControl: 65, gold: 45000, grain: 90000, generalCount: 4 },
-          { id: '3', name: '成都', position_x: 300, position_y: 200, ownerId: '2', color: '#00ff00', rule: 80, population: 80000, soldiers: 40000, agriculture: 90, commerce: 70, waterControl: 85, gold: 40000, grain: 120000, generalCount: 3 },
-          { id: '4', name: '建业', position_x: 400, position_y: 100, ownerId: '3', color: '#0000ff', rule: 88, population: 95000, soldiers: 48000, agriculture: 70, commerce: 95, waterControl: 80, gold: 55000, grain: 85000, generalCount: 4 },
-          { id: '5', name: '襄阳', position_x: 250, position_y: 120, ownerId: '0', color: '#999999', rule: 70, population: 60000, soldiers: 30000, agriculture: 65, commerce: 60, waterControl: 75, gold: 30000, grain: 70000, generalCount: 2 }
-        ];
-        
-        console.log('Using mock city data');
-        setCities(mockCities);
-        setMapReady(true);
-      }
-    } catch (error) {
-      console.error('Error loading cities:', error);
-      // 提供详细的错误信息，但不抛出异常，使用模拟数据
-      console.log('Using mock city data due to error...');
-      const mockCities: City[] = [
-        { id: '1', name: '洛阳', position_x: 100, position_y: 100, ownerId: '1', color: '#ff0000', rule: 90, population: 100000, soldiers: 50000, agriculture: 80, commerce: 90, waterControl: 70, gold: 50000, grain: 100000, generalCount: 5 },
-        { id: '2', name: '长安', position_x: 200, position_y: 150, ownerId: '1', color: '#ff0000', rule: 85, population: 90000, soldiers: 45000, agriculture: 75, commerce: 85, waterControl: 65, gold: 45000, grain: 90000, generalCount: 4 },
-        { id: '3', name: '成都', position_x: 300, position_y: 200, ownerId: '2', color: '#00ff00', rule: 80, population: 80000, soldiers: 40000, agriculture: 90, commerce: 70, waterControl: 85, gold: 40000, grain: 120000, generalCount: 3 },
-        { id: '4', name: '建业', position_x: 400, position_y: 100, ownerId: '3', color: '#0000ff', rule: 88, population: 95000, soldiers: 48000, agriculture: 70, commerce: 95, waterControl: 80, gold: 55000, grain: 85000, generalCount: 4 },
-        { id: '5', name: '襄阳', position_x: 250, position_y: 120, ownerId: '0', color: '#999999', rule: 70, population: 60000, soldiers: 30000, agriculture: 65, commerce: 60, waterControl: 75, gold: 30000, grain: 70000, generalCount: 2 }
-      ];
-      
-      setCities(mockCities);
-      setMapReady(true);
-    } finally {
-      setLoading(false);
-    }
-  };
   
   if (loading) {
     return (
-      <View style={[styles.container, isDarkMode && styles.darkContainer]}>
-        <LoadingSpinner text="加载地图中..." />
+      <View style={[styles.container, isDarkMode && styles.darkContainer, styles.loadingContainer]}>
+        <Text style={[styles.loadingText, isDarkMode && styles.darkText]}>{loadingText}</Text>
+        <View style={[styles.progressBarContainer, isDarkMode && styles.darkProgressBarContainer]}>
+          <View 
+            style={[
+              styles.progressBar, 
+              { width: `${loadingProgress}%` },
+              isDarkMode && styles.darkProgressBar
+            ]} 
+          />
+        </View>
+        <Text style={[styles.progressText, isDarkMode && styles.darkText]}>{loadingProgress}%</Text>
       </View>
     );
   }
@@ -749,7 +813,15 @@ const GameMapScreen = () => {
       {/* 城池信息弹窗 */}
       {selectedCity && (
         <View style={[styles.cityModal, isDarkMode && styles.darkCityModal, styles.largeCityModal]}>
-          <Text style={[styles.cityModalTitle, isDarkMode && styles.darkText]}>{selectedCity.name}</Text>
+          <View style={styles.cityModalHeader}>
+            <Text style={[styles.cityModalTitle, isDarkMode && styles.darkText]}>{selectedCity.name}</Text>
+            <TouchableOpacity
+              style={styles.closeButtonIcon}
+              onPress={() => setSelectedCity(null)}
+            >
+              <Text style={[styles.closeButtonIconText, isDarkMode && styles.darkText]}>×</Text>
+            </TouchableOpacity>
+          </View>
           <Text style={[styles.cityModalInfo, isDarkMode && styles.darkText]}>
             位置: ({selectedCity.position_x}, {selectedCity.position_y})
           </Text>
@@ -814,12 +886,6 @@ const GameMapScreen = () => {
               <Text style={[styles.cityActionButtonText, isDarkMode && styles.darkText]}>战争</Text>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={[styles.closeButton, isDarkMode && styles.darkCloseButton]}
-            onPress={() => setSelectedCity(null)}
-          >
-            <Text style={[styles.closeButtonText, isDarkMode && styles.darkText]}>关闭</Text>
-          </TouchableOpacity>
         </View>
       )}
       
@@ -1215,6 +1281,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
+  cityModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  closeButtonIcon: {
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButtonIconText: {
+    fontSize: 24,
+    color: '#2c2c2c',
+    fontWeight: 'bold',
+  },
   cityModalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -1349,6 +1432,40 @@ const styles = StyleSheet.create({
   },
   darkText: {
     color: '#e0e0d8', // 宣纸白
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    fontSize: 18,
+    color: '#2c2c2c',
+    marginBottom: 20,
+  },
+  progressBarContainer: {
+    width: '80%',
+    height: 20,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: '#4CAF50',
+    borderRadius: 10,
+  },
+  progressText: {
+    fontSize: 16,
+    color: '#2c2c2c',
+  },
+  darkProgressBarContainer: {
+    backgroundColor: '#3a3a3a',
+  },
+  darkProgressBar: {
+    backgroundColor: '#4CAF50',
   },
 });
 
