@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView, PanResponder, Animated } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as XLSX from 'xlsx';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -38,7 +38,10 @@ const GameMapScreen = () => {
   const [mapReady, setMapReady] = useState(false);
   const [scale, setScale] = useState(1);
   const [showCityList, setShowCityList] = useState(true);
+  const [mapX, setMapX] = useState(0);
+  const [mapY, setMapY] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
+  const pan = useRef(new Animated.ValueXY()).current;
   
   // 计算政令数量
   const calculateDecreeCount = () => {
@@ -47,6 +50,25 @@ const GameMapScreen = () => {
     const extraCities = Math.max(0, selectedMonarch.cityCount - 3);
     return Math.min(baseDecrees + extraCities, 5);
   };
+  
+  // 创建PanResponder处理地图拖动
+  const panResponder = PanResponder.create({
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderMove: (_, gestureState) => {
+      pan.setValue({
+        x: mapX + gestureState.dx,
+        y: mapY + gestureState.dy,
+      });
+    },
+    onPanResponderRelease: (_, gestureState) => {
+      setMapX(mapX + gestureState.dx);
+      setMapY(mapY + gestureState.dy);
+      pan.setValue({
+        x: mapX + gestureState.dx,
+        y: mapY + gestureState.dy,
+      });
+    },
+  });
   
   // 处理地图缩放
   const handleZoom = (factor: number) => {
@@ -57,19 +79,20 @@ const GameMapScreen = () => {
   // 处理点击城池列表项
   const handleCityListItemPress = (city: City) => {
     setSelectedCity(city);
-    // 计算滚动位置以定位到选中的城池
+    // 计算位置以定位到选中的城池
     const mapCenterX = screenWidth / 2;
     const mapCenterY = screenHeight / 2;
     const cityX = city.position_x;
     const cityY = city.position_y;
     
-    // 计算需要滚动的位置
-    const newScrollX = cityX - mapCenterX / scale;
-    const newScrollY = cityY - mapCenterY / scale;
+    // 计算需要移动的位置，使城池位于屏幕中央
+    const newMapX = mapCenterX - cityX;
+    const newMapY = mapCenterY - cityY;
     
-    if (scrollViewRef.current) {
-      scrollViewRef.current.scrollTo({ x: newScrollX, y: newScrollY, animated: true });
-    }
+    // 设置地图位置
+    setMapX(newMapX);
+    setMapY(newMapY);
+    pan.setValue({ x: newMapX, y: newMapY });
   };
   
   // 调整视图以显示所有城池
@@ -114,16 +137,16 @@ const GameMapScreen = () => {
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
     
-    // 计算需要的滚动位置
+    // 计算需要的位置，使中心点位于屏幕中央
     const mapCenterX = screenWidth / 2;
     const mapCenterY = screenHeight / 2;
-    const newScrollX = centerX - mapCenterX / optimalScale;
-    const newScrollY = centerY - mapCenterY / optimalScale;
+    const newMapX = mapCenterX - centerX;
+    const newMapY = mapCenterY - centerY;
     
-    // 滚动到中心点
-    if (scrollViewRef.current) {
-      scrollViewRef.current.scrollTo({ x: newScrollX, y: newScrollY, animated: true });
-    }
+    // 设置地图位置
+    setMapX(newMapX);
+    setMapY(newMapY);
+    pan.setValue({ x: newMapX, y: newMapY });
   };
   
   useEffect(() => {
@@ -145,6 +168,39 @@ const GameMapScreen = () => {
       adjustViewToShowAllCities();
     }
   }, [mapReady, cities]);
+  
+  // 当选择君主后，定位到君主拥有的城池
+  useEffect(() => {
+    if (selectedMonarch && cities.length > 0) {
+      // 筛选出君主拥有的城池
+      const monarchCities = cities.filter(city => city.ownerId === selectedMonarch.id);
+      
+      if (monarchCities.length > 0) {
+        // 计算君主城池的中心点
+        let totalX = 0;
+        let totalY = 0;
+        
+        monarchCities.forEach(city => {
+          totalX += city.position_x;
+          totalY += city.position_y;
+        });
+        
+        const centerX = totalX / monarchCities.length;
+        const centerY = totalY / monarchCities.length;
+        
+        // 计算需要移动的位置，使中心点位于屏幕中央
+        const mapCenterX = screenWidth / 2;
+        const mapCenterY = screenHeight / 2;
+        const newMapX = mapCenterX - centerX;
+        const newMapY = mapCenterY - centerY;
+        
+        // 设置地图位置
+        setMapX(newMapX);
+        setMapY(newMapY);
+        pan.setValue({ x: newMapX, y: newMapY });
+      }
+    }
+  }, [selectedMonarch, cities, scale, pan]);
   
   const loadCities = async () => {
     try {
@@ -315,7 +371,6 @@ const GameMapScreen = () => {
                 if (selectedMonarch && city.ownerId === selectedMonarch.id) {
                   cityColor = selectedMonarch.cityColor;
                 }
-                console.log(city, selectedMonarch, '==data==')
                 
                 return (
                   <TouchableOpacity
@@ -337,15 +392,18 @@ const GameMapScreen = () => {
         
         {/* 地图区域 */}
         <View style={styles.mapContainer}>
-          <ScrollView 
-            ref={scrollViewRef}
-            style={styles.scrollView}
-            horizontal={true}
-            bounces={false}
-            showsHorizontalScrollIndicator={false}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.mapContent}>
+          <View style={styles.scrollView} {...panResponder.panHandlers}>
+            <Animated.View 
+              style={[
+                styles.mapContent,
+                {
+                  transform: [
+                    { translateX: pan.x },
+                    { translateY: pan.y },
+                  ],
+                },
+              ]}
+            >
               {/* 城池 */}
               {cities.map((city) => {
                 const x = city.position_x;
@@ -406,8 +464,8 @@ const GameMapScreen = () => {
                   </TouchableOpacity>
                 );
               })}
-            </View>
-          </ScrollView>
+            </Animated.View>
+          </View>
           
           {/* 缩放控制 */}
           <View style={styles.zoomControls}>
@@ -588,6 +646,9 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   scrollView: {
+    flex: 1,
+  },
+  verticalScrollView: {
     flex: 1,
   },
   mapContent: {
