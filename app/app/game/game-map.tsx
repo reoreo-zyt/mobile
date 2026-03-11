@@ -1079,7 +1079,7 @@ const GameMapScreen = () => {
                 </View>
                 
                 {/* 可滚动列 */}
-                <ScrollView horizontal showsHorizontalScrollIndicator={true} style={styles.scrollableColumns}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={true} style={styles.scrollableColumns} scrollEnabled={true}>
                   <View style={styles.scrollableContent}>
                     {/* 可滚动列表头 */}
                     <View style={[styles.generalTableHeader, isDarkMode && styles.darkGeneralTableHeader]}>
@@ -1897,6 +1897,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0e8', // 浅米色
     borderRightWidth: 1,
     borderRightColor: '#d4d4d0', // 浅灰色
+    minWidth: 80,
   },
   fixedHeaderCell: {
     borderBottomWidth: 1,
@@ -1938,8 +1939,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#4a4a4a', // 深灰色
   },
   generalTableHeaderCell: {
-    padding: 8,
-    minWidth: 70,
+    padding: 6,
+    minWidth: 60,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1966,13 +1967,13 @@ const styles = StyleSheet.create({
     borderBottomColor: '#3a3a3a', // 深灰色
   },
   generalTableCell: {
-    padding: 8,
-    minWidth: 70,
+    padding: 6,
+    minWidth: 60,
     alignItems: 'center',
     justifyContent: 'center',
   },
   generalTableCellText: {
-    fontSize: 13,
+    fontSize: 12,
   },
   internalAffairsButtons: {
     flexDirection: 'row',
