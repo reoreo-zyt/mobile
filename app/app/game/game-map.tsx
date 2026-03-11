@@ -384,7 +384,7 @@ const GameMapScreen = () => {
             
             const parsedCities: City[] = jsonData.map((item: any, index: number) => {
               // 统计该城市的武将数量，只统计work小于等于当前年份的武将
-              const currentYear = 189;
+              const currentYear = year;
               const cityId = item['id'] || (index + 1).toString();
               const generalCount = generalsData.filter(general => general.cityId === cityId && general.work <= currentYear).length;
               
@@ -1454,7 +1454,7 @@ const styles = StyleSheet.create({
   zoomControls: {
     position: 'absolute',
     bottom: 20,
-    right: 20,
+    left: 20,
   },
   zoomButton: {
     width: 40,
@@ -1998,7 +1998,7 @@ const styles = StyleSheet.create({
   },
   endTurnButton: {
     position: 'absolute',
-    bottom: 80,
+    bottom: 20,
     right: 20,
     backgroundColor: '#4CAF50',
     paddingHorizontal: 20,
